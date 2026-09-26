@@ -6,19 +6,19 @@
       "value": "production"
     },
     "appServicePlanSku": {
-      "value": "EP1"
+      "value": "EP3"
     },
     "publicNetworkAccess": {
-      "value": "Disabled"
+      "value": "Enabled"
     },
     "enableAuthentication": {
-      "value": true
+      "value": false
     },
     "enablePrivateNetworking": {
-      "value": true
+      "value": false
     },
     "zoneRedundant": {
-      "value": true
+      "value": false
     }
   }
 }
