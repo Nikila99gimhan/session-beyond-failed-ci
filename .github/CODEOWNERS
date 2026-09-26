@@ -1,0 +1,11 @@
+# Enterprise Codeowners - Security & Policy Governance
+# Any modification to workflow definitions or policy catalogs requires review
+
+* @Nikila99gimhan
+
+# Critical Infrastructure & Governance Controls
+/.github/workflows/ @Nikila99gimhan
+/policy/ @Nikila99gimhan
+/contracts/ @Nikila99gimhan
+/infra/ @Nikila99gimhan
+/scripts/validate-deployment-policy.ts @Nikila99gimhan

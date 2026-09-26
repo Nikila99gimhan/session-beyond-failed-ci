@@ -70,7 +70,22 @@ Classify the failure into exactly one authoritative category:
 
 ### 4. Reporting & Safe Output Delivery
 
-If an open issue already reports the same root cause for this commit or branch, use `add-comment` to update the existing thread with the new run link. Do not create a duplicate issue.
+#### Idempotency & Replay Gate:
+1. **Compute Occurrence Key**:
+   - Construct a unique string from: repository, triggering run ID (`${{ github.event.workflow_run.id }}`), run number (`${{ github.event.workflow_run.run_number }}`), head SHA (`${{ github.event.workflow_run.head_sha }}`), earliest failed job, and policy version (`Policy-v2026.1`).
+   - Marker format: `OCCURRENCE_KEY: <repo>::<run_id>::<head_sha>::<failed_job>::<policy_version>`
+2. **Compute Root-Cause Fingerprint**:
+   - Construct grouping string from: organization, service name, environment, sorted violated rule IDs, and policy version.
+   - Marker format: `ROOT_CAUSE_FINGERPRINT: <org>::<service>::<env>::<sorted_rules>::<policy_version>`
+3. **Query Existing Canonical Issues**:
+   - Query open issues for `ROOT_CAUSE_FINGERPRINT`.
+   - **Case A: Exact Replay**: If an open issue or thread already contains this exact `OCCURRENCE_KEY` (exact same run ID and failure), do NOT create an issue or post a duplicate comment. Invoke `noop` safe output with reason:
+     `"SKIP: Exact replay detected for Run #${{ github.event.workflow_run.id }} on ${{ github.event.workflow_run.head_sha }}. Already recorded."`
+   - **Case B: Distinct Occurrence (Rerun or Multi-Account)**: If the canonical issue exists but does NOT contain this `OCCURRENCE_KEY`, invoke `add-comment` to record the new occurrence in a compact table row:
+     `| ${{ github.event.workflow_run.id }} | Run #${{ github.event.workflow_run.run_number }} | ${{ github.event.workflow_run.head_sha }} | ${{ github.event.workflow_run.html_url }} |`
+   - **Case C: New Root Cause**: If no open issue exists for this root-cause fingerprint, create one issue using `create-issue`. Embed both markers at the bottom of the description:
+     `<!-- ROOT_CAUSE_FINGERPRINT: ... -->`
+     `<!-- OCCURRENCE_KEY: ... -->`
 
 Otherwise, create one issue using `create-issue` with the following structure:
 
