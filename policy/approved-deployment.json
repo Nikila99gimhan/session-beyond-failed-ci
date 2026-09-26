@@ -1,0 +1,34 @@
+{
+  "policyVersion": "2026.1",
+  "lastUpdated": "2026-01-15T00:00:00Z",
+  "environment": "production",
+  "rules": [
+    {
+      "ruleId": "POL-AZ-NET-001",
+      "name": "Prohibit Public Ingress on Production Functions",
+      "resourceType": "Microsoft.Web/sites",
+      "field": "publicNetworkAccess",
+      "expectedValue": "Disabled",
+      "severity": "High",
+      "description": "Production Functions must not expose unrestricted public access. Ingress must be restricted to private endpoints or secured virtual networks.",
+      "complianceStandard": "NIST-SP-800-53 / CIS-Azure-9.1"
+    },
+    {
+      "ruleId": "POL-AZ-SKU-003",
+      "name": "Approved Hosting Plan Tier Limit",
+      "resourceType": "Microsoft.Web/serverfarms",
+      "field": "appServicePlanSku",
+      "expectedValue": "EP1",
+      "allowedValues": [
+        "EP1"
+      ],
+      "restrictedValues": [
+        "EP2",
+        "EP3"
+      ],
+      "severity": "Medium",
+      "description": "Production plans must use Elastic Premium tier EP1 (~$145/mo). Higher tiers (EP2 ~$290/mo, EP3 ~$580/mo) require formal FinOps sign-off.",
+      "complianceStandard": "FinOps-Gov-2026"
+    }
+  ]
+}

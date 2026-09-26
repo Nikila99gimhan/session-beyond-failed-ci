@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.company.internal/governance/policy-tool-response.v1.json",
+  "title": "PolicyToolResponseEnvelope",
+  "description": "Common versioned response envelope for Policy MCP tools",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "policyVersion",
+    "tool",
+    "request",
+    "status",
+    "evidence",
+    "evaluatedAt",
+    "correlationId"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "policyVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool": {
+      "type": "string",
+      "enum": [
+        "get_deployment_policy",
+        "get_service_ownership",
+        "get_approved_skus",
+        "get_change_window"
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "status": {
+      "type": "string",
+      "enum": ["SUCCESS", "ERROR"]
+    },
+    "data": {
+      "description": "Payload returned on successful evaluation"
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "isRetryable"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "INVALID_INPUT",
+            "POLICY_NOT_FOUND",
+            "DEPENDENCY_UNAVAILABLE",
+            "TIMEOUT"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "isRetryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["policyId", "source", "summary"],
+        "properties": {
+          "policyId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "evaluatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

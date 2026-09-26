@@ -1,0 +1,10 @@
+{
+  "service": "azure-functions-service",
+  "serviceTier": "Tier-1 Mission Critical",
+  "ownerTeam": "Cloud Platform Engineering",
+  "technicalLead": "tech-lead@company.internal",
+  "securityLiaison": "secops-liaison@company.internal",
+  "finOpsLead": "finops@company.internal",
+  "slackChannel": "#cloud-platform-security",
+  "repository": "session-beyond-failed-ci"
+}

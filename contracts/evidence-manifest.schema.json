@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.company.internal/governance/evidence-manifest.v1.json",
+  "title": "EvidenceManifest",
+  "description": "Cryptographically verifiable manifest of PR artifacts, scans, and MCP evidence",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sourceCommitSha",
+    "createdAt",
+    "correlationId",
+    "files",
+    "scans",
+    "mcpCalls"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0.0"]
+    },
+    "sourceCommitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{40}$"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "sizeBytes"],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "scans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool", "version", "status", "findingsCount", "summary", "isLive"],
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PASS", "FAIL", "WARN", "SKIPPED"]
+          },
+          "findingsCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "summary": {
+            "type": "string"
+          },
+          "isLive": {
+            "type": "boolean",
+            "description": "True if scan was run live against CI runner/Azure; false if fixture"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "mcpCalls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool", "correlationId", "status"],
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["SUCCESS", "ERROR"]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

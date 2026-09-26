@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+policy-result.json
+test-policy-result.json
+investigation-report.md
+.DS_Store
