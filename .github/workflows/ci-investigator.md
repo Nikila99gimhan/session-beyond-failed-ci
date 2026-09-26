@@ -21,7 +21,11 @@ permissions:
 safe-outputs:
   create-issue:
     title-prefix: "[CI Failure] "
+    max: 1
   add-comment:
+    target: "*"
+    max: 1
+    required-title-prefix: "[CI Failure] "
 
 timeout-minutes: 10
 ---

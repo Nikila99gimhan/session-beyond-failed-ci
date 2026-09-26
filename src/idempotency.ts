@@ -1,192 +1,255 @@
 import { createHash } from "node:crypto";
 
-export interface OccurrenceInput {
+/**
+ * Event Identity: Binds strictly to repository + CI run ID + run attempt.
+ * Used to detect exact event replays.
+ */
+export interface EventIdentityInput {
   repository: string;
   runId: number;
   runAttempt: number;
-  headSha: string;
-  failedJob: string;
-  policyVersion: string;
-  accountScope?: string;
 }
 
-export interface RootCauseInput {
-  organization: string;
-  service: string;
-  environment: string;
-  ruleIds: string[];
+/**
+ * Root-Cause Identity: Binds to versioned policy/checker identity + affected resource + violations.
+ * Used to group incidents under canonical tracking.
+ */
+export interface RootCauseIdentityInput {
   policyVersion: string;
+  checkerVersion: string;
+  resourceType: string;
+  violations: string[]; // e.g. ["POL-AZ-NET-001", "POL-AZ-SKU-003"]
 }
 
 export interface TriageEvent {
-  occurrence: OccurrenceInput;
-  rootCause: RootCauseInput;
+  eventIdentity: EventIdentityInput;
+  rootCauseIdentity: RootCauseIdentityInput;
+  headSha: string;
   conclusion: "success" | "failure" | "cancelled" | "timed_out";
+  accountScope?: string;
 }
 
 export interface CanonicalIssue {
   id: string;
-  rootCauseFingerprint: string;
-  occurrences: Set<string>;
-  recordedAccounts: Set<string>;
-  history: Array<{
-    occurrenceKey: string;
-    runId: number;
-    runAttempt: number;
-    headSha: string;
-    accountScope?: string;
-    recordedAt: string;
+  title: string;
+  state: "open" | "closed";
+  labels: string[];
+  rootCauseIdentityKey: string;
+  recordedEvents: Set<string>; // Event Identity keys
+  comments: Array<{
+    id: string;
+    eventKey: string;
+    body: string;
+    createdAt: string;
   }>;
 }
 
 export type TriageDecision =
   | { action: "SKIP_CANCELLED"; reason: string }
-  | { action: "SKIP_EXACT_REPLAY"; reason: string; occurrenceKey: string }
-  | { action: "CREATE_CANONICAL"; canonicalId: string; occurrenceKey: string; rootCauseFingerprint: string }
-  | { action: "UPDATE_CANONICAL"; canonicalId: string; occurrenceKey: string; rootCauseFingerprint: string; isNewAccount: boolean };
+  | { action: "SKIP_EXACT_EVENT_REPLAY"; reason: string; eventKey: string }
+  | { action: "REJECT_INVALID_TARGET"; reason: string; issueId: string }
+  | { action: "CREATE_CANONICAL"; canonicalId: string; eventKey: string; rootCauseKey: string }
+  | { action: "ADD_COMMENT"; canonicalId: string; eventKey: string; commentId: string };
 
 /**
- * Computes a unique, deterministic Occurrence Key.
- * Binds strictly to repository + run_id + run_attempt + head_sha + failed_job + policy_version.
- * An exact replay of the same run attempt produces the identical key.
- * A new run on the same headSha produces a DIFFERENT occurrence key.
+ * Computes deterministic Event Identity key: sha256(repository + runId + attempt).
  */
-export function computeOccurrenceKey(input: OccurrenceInput): string {
+export function computeEventIdentity(input: EventIdentityInput): string {
   const payload = [
-    input.repository.toLowerCase(),
+    input.repository.toLowerCase().trim(),
     input.runId,
     input.runAttempt,
-    input.headSha.toLowerCase(),
-    input.failedJob.toLowerCase(),
-    input.policyVersion,
-    input.accountScope || "default",
   ].join("::");
   return createHash("sha256").update(payload).digest("hex");
 }
 
 /**
- * Computes a Root-Cause Fingerprint for grouping canonical incidents across runs and accounts.
- * Binds to organization + service + environment + sorted rule IDs + policy version.
+ * Computes deterministic Root-Cause Identity key: sha256(policyVersion + checkerVersion + resourceType + sortedViolations).
  */
-export function computeRootCauseFingerprint(input: RootCauseInput): string {
-  const sortedRules = [...input.ruleIds].sort().join(",");
+export function computeRootCauseIdentity(input: RootCauseIdentityInput): string {
+  const sortedViolations = [...input.violations].sort().join(",");
   const payload = [
-    input.organization.toLowerCase(),
-    input.service.toLowerCase(),
-    input.environment.toLowerCase(),
-    sortedRules,
-    input.policyVersion,
+    input.policyVersion.trim(),
+    input.checkerVersion.trim(),
+    input.resourceType.toLowerCase().trim(),
+    sortedViolations,
   ].join("::");
   return createHash("sha256").update(payload).digest("hex");
 }
 
 /**
- * In-memory thread-safe issue store simulating GitHub Issues canonical storage.
+ * Simulated GitHub Issue Store with Safe-Output policy enforcement.
  */
 export class IssueStore {
   private issues = new Map<string, CanonicalIssue>();
-  private nextId = 1;
+  private rootCauseIndex = new Map<string, string>();
+  private nextIssueNumber = 1;
+  private nextCommentId = 100;
 
-  public getByFingerprint(fingerprint: string): CanonicalIssue | undefined {
-    return this.issues.get(fingerprint);
+  public get(id: string): CanonicalIssue | undefined {
+    return this.issues.get(id);
   }
 
   public getAll(): CanonicalIssue[] {
     return Array.from(this.issues.values());
   }
 
-  public create(fingerprint: string, occurrenceKey: string, occurrence: OccurrenceInput): CanonicalIssue {
+  public getByRootCause(rootCauseKey: string): CanonicalIssue | undefined {
+    const issueId = this.rootCauseIndex.get(rootCauseKey);
+    if (!issueId) return undefined;
+    return this.issues.get(issueId);
+  }
+
+  public createCanonicalIssue(
+    rootCauseKey: string,
+    eventKey: string,
+    title: string,
+    labels: string[] = ["ci-failure", "governance"]
+  ): CanonicalIssue {
+    const id = `#${this.nextIssueNumber++}`;
     const issue: CanonicalIssue = {
-      id: `ISSUE-${this.nextId++}`,
-      rootCauseFingerprint: fingerprint,
-      occurrences: new Set([occurrenceKey]),
-      recordedAccounts: new Set(occurrence.accountScope ? [occurrence.accountScope] : []),
-      history: [
-        {
-          occurrenceKey,
-          runId: occurrence.runId,
-          runAttempt: occurrence.runAttempt,
-          headSha: occurrence.headSha,
-          accountScope: occurrence.accountScope,
-          recordedAt: new Date().toISOString(),
-        },
-      ],
+      id,
+      title: title.startsWith("[CI Failure] ") ? title : `[CI Failure] ${title}`,
+      state: "open",
+      labels,
+      rootCauseIdentityKey: rootCauseKey,
+      recordedEvents: new Set([eventKey]),
+      comments: [],
     };
-    this.issues.set(fingerprint, issue);
+    this.issues.set(id, issue);
+    this.rootCauseIndex.set(rootCauseKey, id);
     return issue;
   }
 
-  public addOccurrence(fingerprint: string, occurrenceKey: string, occurrence: OccurrenceInput): boolean {
-    const issue = this.issues.get(fingerprint);
-    if (!issue) return false;
-    if (issue.occurrences.has(occurrenceKey)) {
-      return false; // Already present
+  public addCommentToIssue(
+    issueId: string,
+    eventKey: string,
+    body: string,
+    constraints?: { requiredTitlePrefix?: string; requiredLabels?: string[] }
+  ): { success: boolean; commentId?: string; error?: string } {
+    const issue = this.issues.get(issueId);
+    if (!issue) {
+      return { success: false, error: `Issue ${issueId} not found` };
     }
-    issue.occurrences.add(occurrenceKey);
-    if (occurrence.accountScope) {
-      issue.recordedAccounts.add(occurrence.accountScope);
+
+    if (issue.state !== "open") {
+      return { success: false, error: `Target issue ${issueId} is closed` };
     }
-    issue.history.push({
-      occurrenceKey,
-      runId: occurrence.runId,
-      runAttempt: occurrence.runAttempt,
-      headSha: occurrence.headSha,
-      accountScope: occurrence.accountScope,
-      recordedAt: new Date().toISOString(),
+
+    if (constraints?.requiredTitlePrefix && !issue.title.startsWith(constraints.requiredTitlePrefix)) {
+      return {
+        success: false,
+        error: `Target issue ${issueId} title "${issue.title}" does not start with required prefix "${constraints.requiredTitlePrefix}"`,
+      };
+    }
+
+    if (constraints?.requiredLabels && constraints.requiredLabels.length > 0) {
+      const hasAllLabels = constraints.requiredLabels.every((label) => issue.labels.includes(label));
+      if (!hasAllLabels) {
+        return {
+          success: false,
+          error: `Target issue ${issueId} lacks required labels: ${constraints.requiredLabels.join(", ")}`,
+        };
+      }
+    }
+
+    if (issue.recordedEvents.has(eventKey)) {
+      return { success: false, error: `Event ${eventKey.substring(0, 10)} already recorded on ${issueId}` };
+    }
+
+    const commentId = `comment-${this.nextCommentId++}`;
+    issue.recordedEvents.add(eventKey);
+    issue.comments.push({
+      id: commentId,
+      eventKey,
+      body,
+      createdAt: new Date().toISOString(),
     });
-    return true;
+
+    return { success: true, commentId };
+  }
+
+  public closeIssue(id: string): void {
+    const issue = this.issues.get(id);
+    if (issue) issue.state = "closed";
+  }
+
+  public modifyTitle(id: string, newTitle: string): void {
+    const issue = this.issues.get(id);
+    if (issue) issue.title = newTitle;
+  }
+
+  public removeLabel(id: string, labelToRemove: string): void {
+    const issue = this.issues.get(id);
+    if (issue) issue.labels = issue.labels.filter((l) => l !== labelToRemove);
   }
 }
 
 /**
- * Evaluates an incoming CI triage event with strict idempotency and deterministic skip gates.
+ * Evaluates an incoming triage event against the safe-output handler rules.
  */
-export function evaluateTriageEvent(event: TriageEvent, store: IssueStore): TriageDecision {
-  // Gate 1: Deterministic skip for cancelled runs
+export function evaluateTriageEvent(
+  event: TriageEvent,
+  store: IssueStore,
+  constraints: { requiredTitlePrefix: string; requiredLabels: string[] } = {
+    requiredTitlePrefix: "[CI Failure] ",
+    requiredLabels: ["ci-failure"],
+  }
+): TriageDecision {
   if (event.conclusion === "cancelled") {
     return {
       action: "SKIP_CANCELLED",
-      reason: `Workflow run #${event.occurrence.runId} (attempt #${event.occurrence.runAttempt}) was cancelled by user; non-actionable.`,
+      reason: `Workflow run #${event.eventIdentity.runId} (attempt #${event.eventIdentity.runAttempt}) was cancelled; non-actionable.`,
     };
   }
 
-  // Gate 2: Compute cryptographic keys
-  const occurrenceKey = computeOccurrenceKey(event.occurrence);
-  const fingerprint = computeRootCauseFingerprint(event.rootCause);
+  const eventKey = computeEventIdentity(event.eventIdentity);
+  const rootCauseKey = computeRootCauseIdentity(event.rootCauseIdentity);
 
-  const existingIssue = store.getByFingerprint(fingerprint);
+  const existingIssue = store.getByRootCause(rootCauseKey);
 
-  if (!existingIssue) {
-    const created = store.create(fingerprint, occurrenceKey, event.occurrence);
+  if (!existingIssue || existingIssue.state === "closed") {
+    const newIssue = store.createCanonicalIssue(
+      rootCauseKey,
+      eventKey,
+      `[CI Failure] Policy Regression: ${event.rootCauseIdentity.violations.join(", ")} in ${event.rootCauseIdentity.resourceType}`,
+      ["ci-failure", "governance"]
+    );
     return {
       action: "CREATE_CANONICAL",
-      canonicalId: created.id,
-      occurrenceKey,
-      rootCauseFingerprint: fingerprint,
+      canonicalId: newIssue.id,
+      eventKey,
+      rootCauseKey,
     };
   }
 
-  // Gate 3: Exact replay check (same run ID + attempt)
-  if (existingIssue.occurrences.has(occurrenceKey)) {
+  if (existingIssue.recordedEvents.has(eventKey)) {
     return {
-      action: "SKIP_EXACT_REPLAY",
-      reason: `Exact replay detected for occurrence key ${occurrenceKey.substring(0, 12)} (Run #${event.occurrence.runId}, attempt #${event.occurrence.runAttempt}). Already recorded in ${existingIssue.id}.`,
-      occurrenceKey,
+      action: "SKIP_EXACT_EVENT_REPLAY",
+      reason: `Exact event replay detected (Run #${event.eventIdentity.runId}, Attempt #${event.eventIdentity.runAttempt}). Already recorded on ${existingIssue.id}.`,
+      eventKey,
     };
   }
 
-  // Gate 4: New occurrence for existing root cause (e.g. rerun, new attempt, or distinct account)
-  const isNewAccount = event.occurrence.accountScope
-    ? !existingIssue.recordedAccounts.has(event.occurrence.accountScope)
-    : false;
+  const commentResult = store.addCommentToIssue(
+    existingIssue.id,
+    eventKey,
+    `New failure occurrence in Run #${event.eventIdentity.runId} (Attempt #${event.eventIdentity.runAttempt}) on ${event.headSha}`,
+    constraints
+  );
 
-  store.addOccurrence(fingerprint, occurrenceKey, event.occurrence);
+  if (!commentResult.success) {
+    return {
+      action: "REJECT_INVALID_TARGET",
+      reason: commentResult.error || "Failed to add comment",
+      issueId: existingIssue.id,
+    };
+  }
 
   return {
-    action: "UPDATE_CANONICAL",
+    action: "ADD_COMMENT",
     canonicalId: existingIssue.id,
-    occurrenceKey,
-    rootCauseFingerprint: fingerprint,
-    isNewAccount,
+    eventKey,
+    commentId: commentResult.commentId!,
   };
 }
