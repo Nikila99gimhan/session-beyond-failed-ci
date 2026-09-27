@@ -54,7 +54,8 @@
             "INVALID_INPUT",
             "POLICY_NOT_FOUND",
             "DEPENDENCY_UNAVAILABLE",
-            "TIMEOUT"
+            "TIMEOUT",
+            "UNAUTHORIZED_SCOPE"
           ]
         },
         "message": {

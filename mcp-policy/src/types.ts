@@ -21,6 +21,7 @@ export const ErrorCodeSchema = z.enum([
   "POLICY_NOT_FOUND",
   "DEPENDENCY_UNAVAILABLE",
   "TIMEOUT",
+  "UNAUTHORIZED_SCOPE",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 

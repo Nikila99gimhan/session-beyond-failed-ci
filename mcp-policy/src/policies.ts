@@ -422,6 +422,19 @@ export async function executeGetInvestigationContext(
     );
   }
 
+  // Server-side caller scope authorization check
+  const PERMITTED_SCOPES = ["production", "sub-prod-eastus-01", "sub-prod-westus-02", "default"];
+  if (input.accountScope && !PERMITTED_SCOPES.includes(input.accountScope)) {
+    return buildErrorEnvelope(
+      "get_investigation_context",
+      reqObj,
+      "UNAUTHORIZED_SCOPE",
+      `Account scope '${input.accountScope}' is unauthorized or outside permitted enterprise boundary. Failing closed.`,
+      false,
+      context
+    );
+  }
+
   try {
     const env = input.environment as AllowedEnvironment;
     const srv = input.service as AllowedService;
