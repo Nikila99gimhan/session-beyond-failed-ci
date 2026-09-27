@@ -1,6 +1,7 @@
 import http from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import {
@@ -265,11 +266,8 @@ export async function runStdioServer(): Promise<void> {
 }
 
 export async function runHttpServer(port: number = 8765): Promise<http.Server> {
-  const { server } = createGovernedPolicyServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
-  await server.connect(transport);
+  const { server, context } = createGovernedPolicyServer();
+  let sseTransport: SSEServerTransport | null = null;
 
   const httpServer = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -281,11 +279,162 @@ export async function runHttpServer(port: number = 8765): Promise<http.Server> {
       return;
     }
 
-    if (req.url === "/mcp" || req.url === "/mcp/" || req.url?.startsWith("/mcp?")) {
-      await transport.handleRequest(req, res);
-    } else {
-      res.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "Not Found" }));
+    // 1. SSE Connection (GET /mcp or GET /sse)
+    if (req.method === "GET" && (req.url === "/mcp" || req.url === "/sse" || req.url?.startsWith("/mcp?"))) {
+      sseTransport = new SSEServerTransport("/messages", res);
+      await server.connect(sseTransport);
+      return;
     }
+
+    // 2. SSE POST messages (/messages?sessionId=...)
+    if (req.method === "POST" && req.url?.startsWith("/messages")) {
+      if (sseTransport) {
+        await sseTransport.handlePostMessage(req, res);
+      } else {
+        res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "No active SSE connection" }));
+      }
+      return;
+    }
+
+    // 3. Plain JSON-RPC or direct POST /mcp fallback
+    if (req.method === "POST" && (req.url === "/mcp" || req.url === "/mcp/")) {
+      let raw = "";
+      req.on("data", (chunk) => (raw += chunk));
+      req.on("end", async () => {
+        try {
+          const msg = JSON.parse(raw);
+          if (msg.method === "initialize") {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: msg.id,
+                result: {
+                  protocolVersion: "2024-11-05",
+                  capabilities: { tools: {} },
+                  serverInfo: { name: "governed-azure-policy-mcp-server", version: "1.0.0" },
+                },
+              })
+            );
+            return;
+          }
+
+          if (msg.method === "notifications/initialized") {
+            res.writeHead(204).end();
+            return;
+          }
+
+          if (msg.method === "tools/list") {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: msg.id,
+                result: {
+                  tools: [
+                    {
+                      name: "get_investigation_context",
+                      description: "Consolidated, read-only investigation context tool",
+                      inputSchema: {
+                        type: "object",
+                        properties: {
+                          service: { type: "string" },
+                          environment: { type: "string" },
+                          accountScope: { type: "string" },
+                          ruleIds: { type: "array", items: { type: "string" } },
+                          policyVersion: { type: "string" },
+                        },
+                        required: ["service", "environment"],
+                      },
+                    },
+                    {
+                      name: "get_deployment_policy",
+                      description: "Read-only deployment policy evaluation tool",
+                      inputSchema: {
+                        type: "object",
+                        properties: { environment: { type: "string" }, resourceType: { type: "string" } },
+                        required: ["environment", "resourceType"],
+                      },
+                    },
+                    {
+                      name: "get_service_ownership",
+                      description: "Read-only enterprise service ownership lookup",
+                      inputSchema: {
+                        type: "object",
+                        properties: { service: { type: "string" } },
+                        required: ["service"],
+                      },
+                    },
+                    {
+                      name: "get_approved_skus",
+                      description: "Read-only approved hosting plan SKU tiers",
+                      inputSchema: {
+                        type: "object",
+                        properties: { environment: { type: "string" } },
+                        required: ["environment"],
+                      },
+                    },
+                    {
+                      name: "get_change_window",
+                      description: "Read-only active change freeze window status",
+                      inputSchema: {
+                        type: "object",
+                        properties: { service: { type: "string" } },
+                        required: ["service"],
+                      },
+                    },
+                  ],
+                },
+              })
+            );
+            return;
+          }
+
+          if (msg.method === "tools/call") {
+            const toolName = msg.params?.name;
+            const args = msg.params?.arguments || {};
+            let toolResult: any;
+
+            if (toolName === "get_investigation_context") {
+              toolResult = await executeGetInvestigationContext(args, context);
+            } else if (toolName === "get_deployment_policy") {
+              toolResult = await executeGetDeploymentPolicy(args, context);
+            } else if (toolName === "get_service_ownership") {
+              toolResult = await executeGetServiceOwnership(args, context);
+            } else if (toolName === "get_approved_skus") {
+              toolResult = await executeGetApprovedSkus(args, context);
+            } else if (toolName === "get_change_window") {
+              toolResult = await executeGetChangeWindow(args, context);
+            } else {
+              res.writeHead(400, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } }));
+              return;
+            }
+
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: msg.id,
+                result: {
+                  content: [{ type: "text", text: safeSerialize(toolResult) }],
+                },
+              })
+            );
+            return;
+          }
+
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code: -32600, message: "Invalid Request" } }));
+        } catch (err: any) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32603, message: String(err) } }));
+        }
+      });
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "Not Found" }));
   });
 
   return new Promise((resolve, reject) => {
