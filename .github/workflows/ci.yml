@@ -78,10 +78,16 @@ jobs:
         id: policy_eval
         run: npm run validate:policy
 
+      - name: Package Investigation Context Bundle
+        if: always()
+        run: npx tsx scripts/package-evidence.ts infra/parameters/active.json policy-result.json investigation-context.json
+
       - name: Upload Policy Evidence Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: policy-result
-          path: policy-result.json
+          path: |
+            policy-result.json
+            investigation-context.json
           retention-days: 7

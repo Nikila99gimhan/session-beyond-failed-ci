@@ -11,9 +11,10 @@ import {
   executeGetServiceOwnership,
   executeGetApprovedSkus,
   executeGetChangeWindow,
+  executeGetInvestigationContext,
   createDefaultToolContext,
 } from "../mcp-policy/src/policies.js";
-import { FixturePolicyRepository } from "../mcp-policy/src/repository.js";
+import { FixturePolicyRepository, CachedPolicyRepository } from "../mcp-policy/src/repository.js";
 import { PolicyToolResponseEnvelope } from "../mcp-policy/src/types.js";
 
 // @ts-ignore
@@ -40,17 +41,18 @@ const deterministicContext = createDefaultToolContext({
 
 describe("Read-Only Policy MCP Server", () => {
   describe("Static Tool Registration & Allowlist Assertion", () => {
-    it("proves the exposed MCP tool list contains strictly the four approved tools", () => {
+    it("proves the exposed MCP tool list contains strictly the five approved tools", () => {
       const { toolNames } = createGovernedPolicyServer();
       const expectedTools = [
         "get_deployment_policy",
         "get_service_ownership",
         "get_approved_skus",
         "get_change_window",
+        "get_investigation_context",
       ];
 
       expect(toolNames).toEqual(expectedTools);
-      expect(APPROVED_POLICY_TOOLS).toHaveLength(4);
+      expect(APPROVED_POLICY_TOOLS).toHaveLength(5);
       expect([...toolNames].sort()).toEqual([...expectedTools].sort());
     });
   });
@@ -165,6 +167,103 @@ describe("Read-Only Policy MCP Server", () => {
       expect(result.status).toBe("ERROR");
       expect(result.error?.code).toBe("INVALID_INPUT");
       expect(result.error?.isRetryable).toBe(false);
+    });
+  });
+
+  describe("Phase 2: Consolidated Batched Tool (get_investigation_context)", () => {
+    it("produces valid consolidated investigation context for production azure-functions-service", async () => {
+      const result = await executeGetInvestigationContext(
+        {
+          service: "azure-functions-service",
+          environment: "production",
+          ruleIds: ["POL-AZ-NET-001", "POL-AZ-SKU-003"],
+        },
+        deterministicContext
+      );
+
+      assertValidEnvelope(result);
+      expect(result.status).toBe("SUCCESS");
+      expect(result.tool).toBe("get_investigation_context");
+
+      const data = result.data as any;
+      expect(data.serviceOwnership.ownerTeam).toBe("Cloud Platform Engineering");
+      expect(data.approvedSkus.approvedSkus).toEqual(["EP1"]);
+      expect(data.approvedSkus.restrictedSkus).toContain("EP3");
+      expect(data.applicableRules).toHaveLength(2);
+      expect(data.freshness.isFresh).toBe(true);
+      expect(data.freshness.policyVersion).toBe("2026.1");
+
+      // Verify evidence consolidation
+      expect(result.evidence.length).toBeGreaterThanOrEqual(3);
+      const policyIds = result.evidence.map((e) => e.policyId);
+      expect(policyIds).toContain("POL-AZ-NET-001");
+      expect(policyIds).toContain("POL-AZ-SKU-003");
+      expect(policyIds).toContain("SVC-OWN-001");
+    });
+
+    it("fails closed when requested policy version mismatches active catalog", async () => {
+      const result = await executeGetInvestigationContext(
+        {
+          service: "azure-functions-service",
+          environment: "production",
+          policyVersion: "1999.0", // Mismatched version
+        },
+        deterministicContext
+      );
+
+      assertValidEnvelope(result);
+      expect(result.status).toBe("ERROR");
+      expect(result.error?.code).toBe("POLICY_NOT_FOUND");
+      expect(result.error?.message).toContain("does not match active catalog version");
+    });
+  });
+
+  describe("Phase 3: Cached Policy Repository with Trust Boundaries", () => {
+    it("tracks cache hits and accelerates repeated calls", async () => {
+      const cachedRepo = new CachedPolicyRepository(new FixturePolicyRepository(), { ttlMs: 60_000 });
+      const stats0 = cachedRepo.getStats();
+      expect(stats0.hits).toBe(0);
+      expect(stats0.misses).toBe(0);
+
+      // Cold call
+      const res1 = await cachedRepo.getApprovedSkus("production");
+      expect(res1?.approvedSkus).toEqual(["EP1"]);
+      expect(cachedRepo.getStats().misses).toBe(1);
+      expect(cachedRepo.getStats().hits).toBe(0);
+
+      // Warm call (should hit cache)
+      const res2 = await cachedRepo.getApprovedSkus("production");
+      expect(res2?.approvedSkus).toEqual(["EP1"]);
+      expect(cachedRepo.getStats().hits).toBe(1);
+      expect(cachedRepo.getStats().misses).toBe(1);
+    });
+
+    it("evicts expired entries after TTL and increments evictions", async () => {
+      // 10ms short TTL
+      const shortTtlRepo = new CachedPolicyRepository(new FixturePolicyRepository(), { ttlMs: 10 });
+      await shortTtlRepo.getServiceOwnership("azure-functions-service");
+      expect(shortTtlRepo.getStats().misses).toBe(1);
+
+      // Wait 20ms for TTL expiry
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // Next call should detect expiry, evict, and fetch fresh
+      await shortTtlRepo.getServiceOwnership("azure-functions-service");
+      expect(shortTtlRepo.getStats().evictions).toBe(1);
+      expect(shortTtlRepo.getStats().misses).toBe(2);
+    });
+
+    it("guarantees tenant isolation across cache keys", async () => {
+      const tenantA = new CachedPolicyRepository(new FixturePolicyRepository(), { tenantId: "tenant-A" });
+      const tenantB = new CachedPolicyRepository(new FixturePolicyRepository(), { tenantId: "tenant-B" });
+
+      await tenantA.getDeploymentPolicies("production", "Microsoft.Web/sites");
+      expect(tenantA.getStats().misses).toBe(1);
+
+      // Tenant B queries same resource - must NOT hit Tenant A's cache
+      await tenantB.getDeploymentPolicies("production", "Microsoft.Web/sites");
+      expect(tenantB.getStats().misses).toBe(1);
+      expect(tenantB.getStats().hits).toBe(0);
     });
   });
 });

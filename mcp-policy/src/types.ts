@@ -40,7 +40,7 @@ export interface EvidenceEntry {
 export interface PolicyToolResponseEnvelope<T = unknown> {
   schemaVersion: "1.0.0";
   policyVersion: string;
-  tool: "get_deployment_policy" | "get_service_ownership" | "get_approved_skus" | "get_change_window";
+  tool: "get_deployment_policy" | "get_service_ownership" | "get_approved_skus" | "get_change_window" | "get_investigation_context";
   request: Record<string, unknown>;
   status: "SUCCESS" | "ERROR";
   data?: T;
@@ -108,3 +108,30 @@ export const ApprovedSkusInputSchema = z.object({
 export const ChangeWindowInputSchema = z.object({
   service: z.string().trim().max(100),
 });
+
+export const InvestigationContextInputSchema = z.object({
+  service: z.string().trim().max(100),
+  environment: z.string().trim().max(50),
+  accountScope: z.string().trim().max(100).optional(),
+  ruleIds: z.array(z.string().trim().max(50)).optional(),
+  policyVersion: z.string().trim().max(20).optional(),
+});
+
+export type InvestigationContextInput = z.infer<typeof InvestigationContextInputSchema>;
+
+export interface FreshnessMetadata {
+  policyVersion: string;
+  evaluatedAt: string;
+  isFresh: boolean;
+  ttlSeconds: number;
+  sourceUrl: string;
+}
+
+export interface InvestigationContextData {
+  serviceOwnership: ServiceOwnership;
+  applicableRules: DeploymentPolicy[];
+  approvedSkus: ApprovedSkusInfo;
+  changeWindow: ChangeWindow;
+  freshness: FreshnessMetadata;
+  exceptions: Array<{ ruleId: string; status: string; details: string }>;
+}

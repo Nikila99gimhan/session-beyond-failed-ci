@@ -9,6 +9,8 @@ import {
   EvidenceEntry,
   PolicyToolResponseEnvelope,
   StructuredError,
+  InvestigationContextInput,
+  InvestigationContextData,
 } from "./types.js";
 import { IPolicyRepository, FixturePolicyRepository } from "./repository.js";
 
@@ -371,6 +373,160 @@ export async function executeGetChangeWindow(
     }
     return buildErrorEnvelope(
       "get_change_window",
+      reqObj,
+      "DEPENDENCY_UNAVAILABLE",
+      `Policy repository unavailable: ${error.message}`,
+      true,
+      context
+    );
+  }
+}
+
+// 5. get_investigation_context (Phase 2: Consolidated Batched Tool)
+export async function executeGetInvestigationContext(
+  input: InvestigationContextInput,
+  context: ToolContext = createDefaultToolContext()
+): Promise<PolicyToolResponseEnvelope> {
+  const reqObj = { ...input };
+
+  if (!ALLOWED_ENVIRONMENTS.includes(input.environment as AllowedEnvironment)) {
+    return buildErrorEnvelope(
+      "get_investigation_context",
+      reqObj,
+      "INVALID_INPUT",
+      `Environment '${input.environment}' is not permitted. Must be one of: ${ALLOWED_ENVIRONMENTS.join(", ")}`,
+      false,
+      context
+    );
+  }
+
+  if (!ALLOWED_SERVICES.includes(input.service as AllowedService)) {
+    return buildErrorEnvelope(
+      "get_investigation_context",
+      reqObj,
+      "INVALID_INPUT",
+      `Service '${input.service}' is not in approved registry. Must be one of: ${ALLOWED_SERVICES.join(", ")}`,
+      false,
+      context
+    );
+  }
+
+  if (input.policyVersion && input.policyVersion !== POLICY_VERSION) {
+    return buildErrorEnvelope(
+      "get_investigation_context",
+      reqObj,
+      "POLICY_NOT_FOUND",
+      `Requested policy version '${input.policyVersion}' does not match active catalog version '${POLICY_VERSION}'.`,
+      false,
+      context
+    );
+  }
+
+  try {
+    const env = input.environment as AllowedEnvironment;
+    const srv = input.service as AllowedService;
+
+    const [sitePolicies, farmPolicies, storagePolicies, approvedSkus, ownership, changeWindow] =
+      await withTimeout(
+        Promise.all([
+          context.repository.getDeploymentPolicies(env, "Microsoft.Web/sites"),
+          context.repository.getDeploymentPolicies(env, "Microsoft.Web/serverfarms"),
+          context.repository.getDeploymentPolicies(env, "Microsoft.Storage/storageAccounts"),
+          context.repository.getApprovedSkus(env),
+          context.repository.getServiceOwnership(srv),
+          context.repository.getChangeWindow(srv),
+        ]),
+        context.timeoutMs
+      );
+
+    if (!ownership) {
+      return buildErrorEnvelope(
+        "get_investigation_context",
+        reqObj,
+        "POLICY_NOT_FOUND",
+        `Service ownership not registered for '${input.service}'.`,
+        false,
+        context
+      );
+    }
+
+    if (!approvedSkus) {
+      return buildErrorEnvelope(
+        "get_investigation_context",
+        reqObj,
+        "POLICY_NOT_FOUND",
+        `SKU policy not found for environment '${input.environment}'.`,
+        false,
+        context
+      );
+    }
+
+    const allPolicies = [
+      ...(sitePolicies || []),
+      ...(farmPolicies || []),
+      ...(storagePolicies || []),
+    ];
+
+    let applicableRules = allPolicies;
+    if (input.ruleIds && input.ruleIds.length > 0) {
+      applicableRules = allPolicies.filter((p) => input.ruleIds!.includes(p.policyId));
+    }
+
+    const evidence: EvidenceEntry[] = [
+      ...applicableRules.map((p) => ({
+        policyId: p.policyId,
+        source: "enterprise-policy-registry",
+        summary: p.description,
+      })),
+      {
+        policyId: "SVC-OWN-001",
+        source: "enterprise-cmdb-service-catalog",
+        summary: `Owned by ${ownership.ownerTeam} (${ownership.slackChannel})`,
+      },
+      {
+        policyId: "FINOPS-SKU-001",
+        source: "finops-sku-catalog-2026",
+        summary: `Approved SKUs: ${approvedSkus.approvedSkus.join(", ")}`,
+      },
+    ];
+
+    const data: InvestigationContextData = {
+      serviceOwnership: ownership,
+      applicableRules,
+      approvedSkus,
+      changeWindow: changeWindow || {
+        service: srv,
+        status: "OPEN",
+        activeWindow: "Standard business hours UTC",
+        nextChangeWindow: "Standard business hours UTC",
+        freezeWindowActive: false,
+        requiresCabApproval: false,
+      },
+      freshness: {
+        policyVersion: POLICY_VERSION,
+        evaluatedAt: context.now().toISOString(),
+        isFresh: true,
+        ttlSeconds: 300,
+        sourceUrl: "https://governance.internal/policies/v2026.1",
+      },
+      exceptions: [],
+    };
+
+    return buildSuccessEnvelope("get_investigation_context", reqObj, data, evidence, context);
+  } catch (err: unknown) {
+    const error = err as Error;
+    if (error.name === "TimeoutError") {
+      return buildErrorEnvelope(
+        "get_investigation_context",
+        reqObj,
+        "TIMEOUT",
+        error.message,
+        true,
+        context
+      );
+    }
+    return buildErrorEnvelope(
+      "get_investigation_context",
       reqObj,
       "DEPENDENCY_UNAVAILABLE",
       `Policy repository unavailable: ${error.message}`,

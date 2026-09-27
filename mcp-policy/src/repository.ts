@@ -200,3 +200,148 @@ export class FixturePolicyRepository implements IPolicyRepository {
     return null;
   }
 }
+
+export interface CacheStats {
+  hits: number;
+  misses: number;
+  evictions: number;
+}
+
+export interface CacheOptions {
+  ttlMs?: number;
+  tenantId?: string;
+}
+
+interface CacheEntry<T> {
+  data: T;
+  cachedAt: number;
+  expiresAt: number;
+  policyVersion: string;
+}
+
+/**
+ * Enterprise Cached Policy Repository with bounded TTL, freshness checks,
+ * and tenant-isolation boundaries.
+ */
+export class CachedPolicyRepository implements IPolicyRepository {
+  private cache = new Map<string, CacheEntry<any>>();
+  private stats: CacheStats = { hits: 0, misses: 0, evictions: 0 };
+  private ttlMs: number;
+  private tenantId: string;
+  private underlying: IPolicyRepository;
+
+  constructor(underlying: IPolicyRepository = new FixturePolicyRepository(), options?: CacheOptions) {
+    this.underlying = underlying;
+    this.ttlMs = options?.ttlMs ?? 300_000; // 5 min default
+    this.tenantId = options?.tenantId ?? "default-tenant";
+  }
+
+  public getStats(): CacheStats {
+    return { ...this.stats };
+  }
+
+  public clear(): void {
+    this.cache.clear();
+  }
+
+  private buildKey(tool: string, paramKey: string): string {
+    return `${this.tenantId}::${tool}::${paramKey}`;
+  }
+
+  private getCached<T>(key: string, requiredVersion: string = "2026.1"): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) {
+      this.stats.misses++;
+      return null;
+    }
+
+    const now = Date.now();
+    if (now > entry.expiresAt) {
+      this.cache.delete(key);
+      this.stats.evictions++;
+      this.stats.misses++;
+      return null;
+    }
+
+    if (entry.policyVersion !== requiredVersion) {
+      this.cache.delete(key);
+      this.stats.evictions++;
+      this.stats.misses++;
+      return null;
+    }
+
+    this.stats.hits++;
+    return entry.data as T;
+  }
+
+  private setCached<T>(key: string, data: T, policyVersion: string = "2026.1"): void {
+    const now = Date.now();
+    this.cache.set(key, {
+      data,
+      cachedAt: now,
+      expiresAt: now + this.ttlMs,
+      policyVersion,
+    });
+  }
+
+  async getDeploymentPolicies(
+    environment: AllowedEnvironment,
+    resourceType: AllowedResourceType
+  ): Promise<DeploymentPolicy[] | null> {
+    const key = this.buildKey("deployment-policies", `${environment}::${resourceType}`);
+    const cached = this.getCached<DeploymentPolicy[]>(key);
+    if (cached !== null) {
+      return cached;
+    }
+    const fresh = await this.underlying.getDeploymentPolicies(environment, resourceType);
+    if (fresh !== null) {
+      this.setCached(key, fresh);
+    }
+    return fresh;
+  }
+
+  async getApprovedSkus(
+    environment: AllowedEnvironment
+  ): Promise<ApprovedSkusInfo | null> {
+    const key = this.buildKey("approved-skus", environment);
+    const cached = this.getCached<ApprovedSkusInfo>(key);
+    if (cached !== null) {
+      return cached;
+    }
+    const fresh = await this.underlying.getApprovedSkus(environment);
+    if (fresh !== null) {
+      this.setCached(key, fresh);
+    }
+    return fresh;
+  }
+
+  async getServiceOwnership(
+    service: AllowedService
+  ): Promise<ServiceOwnership | null> {
+    const key = this.buildKey("service-ownership", service);
+    const cached = this.getCached<ServiceOwnership>(key);
+    if (cached !== null) {
+      return cached;
+    }
+    const fresh = await this.underlying.getServiceOwnership(service);
+    if (fresh !== null) {
+      this.setCached(key, fresh);
+    }
+    return fresh;
+  }
+
+  async getChangeWindow(
+    service: AllowedService
+  ): Promise<ChangeWindow | null> {
+    const key = this.buildKey("change-window", service);
+    const cached = this.getCached<ChangeWindow>(key);
+    if (cached !== null) {
+      return cached;
+    }
+    const fresh = await this.underlying.getChangeWindow(service);
+    if (fresh !== null) {
+      this.setCached(key, fresh);
+    }
+    return fresh;
+  }
+}

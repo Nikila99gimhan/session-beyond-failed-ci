@@ -18,6 +18,11 @@ permissions:
   issues: read
   pull-requests: read
 
+tools:
+  github:
+    mode: gh-proxy
+    toolsets: [issues, pull_requests, actions, repos]
+
 safe-outputs:
   create-issue:
     title-prefix: "[CI Failure] "
@@ -55,7 +60,7 @@ Execute the following sequential investigation steps:
 ### 1. Triage the Failure
 1. Inspect the workflow run and list its jobs (`application-tests`, `bicep-validation`, `deployment-policy`).
 2. Identify the earliest failed job and extract the primary error message and exit code.
-3. If the failure occurred in `deployment-policy`, check the step logs and locate the `policy-result.json` evidence artifact.
+3. If the failure occurred in `deployment-policy`, check the uploaded `policy-result` artifact containing `investigation-context.json` and `policy-result.json`. Read this pre-packaged bounded context bundle directly instead of issuing repeated redundant file queries.
 
 ### 2. Failure Classification
 Classify the failure into exactly one authoritative category:

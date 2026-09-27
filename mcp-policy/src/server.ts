@@ -6,6 +6,7 @@ import {
   ServiceOwnershipInputSchema,
   ApprovedSkusInputSchema,
   ChangeWindowInputSchema,
+  InvestigationContextInputSchema,
   PolicyToolResponseEnvelope,
 } from "./types.js";
 import {
@@ -15,6 +16,7 @@ import {
   executeGetServiceOwnership,
   executeGetApprovedSkus,
   executeGetChangeWindow,
+  executeGetInvestigationContext,
   buildErrorEnvelope,
 } from "./policies.js";
 
@@ -23,6 +25,7 @@ export const APPROVED_POLICY_TOOLS = [
   "get_service_ownership",
   "get_approved_skus",
   "get_change_window",
+  "get_investigation_context",
 ] as const;
 
 export type ApprovedPolicyTool = typeof APPROVED_POLICY_TOOLS[number];
@@ -192,6 +195,48 @@ export function createGovernedPolicyServer(contextOverrides?: Partial<ToolContex
         };
       }
       const result = await executeGetChangeWindow(parsed.data, context);
+      return {
+        content: [
+          {
+            type: "text",
+            text: safeSerialize(result),
+          },
+        ],
+      };
+    }
+  );
+
+  // 5. get_investigation_context (Phase 2: Consolidated Batched Tool)
+  server.tool(
+    "get_investigation_context",
+    {
+      service: z.any().optional().describe("Service identifier or component name"),
+      environment: z.any().optional().describe("Target environment, e.g. production or development"),
+      accountScope: z.any().optional().describe("Optional subscription or account scope"),
+      ruleIds: z.any().optional().describe("Optional list of violated rule IDs"),
+      policyVersion: z.any().optional().describe("Policy catalog version"),
+    },
+    async (params) => {
+      const parsed = InvestigationContextInputSchema.safeParse(params);
+      if (!parsed.success) {
+        const errorEnvelope = buildErrorEnvelope(
+          "get_investigation_context",
+          params as Record<string, unknown>,
+          "INVALID_INPUT",
+          `Input validation failed: ${parsed.error.message}`,
+          false,
+          context
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: safeSerialize(errorEnvelope),
+            },
+          ],
+        };
+      }
+      const result = await executeGetInvestigationContext(parsed.data, context);
       return {
         content: [
           {

@@ -29,7 +29,8 @@
         "get_deployment_policy",
         "get_service_ownership",
         "get_approved_skus",
-        "get_change_window"
+        "get_change_window",
+        "get_investigation_context"
       ]
     },
     "request": {
