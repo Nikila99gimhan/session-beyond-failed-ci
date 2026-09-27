@@ -10,7 +10,7 @@ on:
     types: [completed]
     branches: [main, baseline, policy-regression]
 
-if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+if: ${{ github.event.workflow_run.conclusion == 'failure' && vars.DISABLE_CI_INVESTIGATOR != 'true' }}
 
 permissions:
   actions: read
@@ -33,6 +33,7 @@ safe-outputs:
     required-title-prefix: "[CI Failure] "
 
 timeout-minutes: 10
+max-ai-credits: 120
 ---
 
 # Governed CI Investigation Agent
