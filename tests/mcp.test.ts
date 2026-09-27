@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import Ajv from "ajv";
+import http from "node:http";
 import {
   createGovernedPolicyServer,
   APPROVED_POLICY_TOOLS,
+  runHttpServer,
 } from "../mcp-policy/src/server.js";
 import {
   executeGetDeploymentPolicy,
@@ -216,6 +218,22 @@ describe("Read-Only Policy MCP Server", () => {
       expect(result.error?.code).toBe("POLICY_NOT_FOUND");
       expect(result.error?.message).toContain("does not match active catalog version");
     });
+
+    it("fails closed when caller requests unauthorized account scope (server-side authorization)", async () => {
+      const result = await executeGetInvestigationContext(
+        {
+          service: "azure-functions-service",
+          environment: "production",
+          accountScope: "unauthorized-rogue-tenant",
+        },
+        deterministicContext
+      );
+
+      assertValidEnvelope(result);
+      expect(result.status).toBe("ERROR");
+      expect(result.error?.code).toBe("UNAUTHORIZED_SCOPE");
+      expect(result.error?.message).toContain("unauthorized or outside permitted enterprise boundary");
+    });
   });
 
   describe("Phase 3: Cached Policy Repository with Trust Boundaries", () => {
@@ -264,6 +282,52 @@ describe("Read-Only Policy MCP Server", () => {
       await tenantB.getDeploymentPolicies("production", "Microsoft.Web/sites");
       expect(tenantB.getStats().misses).toBe(1);
       expect(tenantB.getStats().hits).toBe(0);
+    });
+  });
+
+  describe("Phase 4: HTTP Transport Protocol Verification", () => {
+    it("starts HTTP MCP server and successfully responds to JSON-RPC tools/list", async () => {
+      const testPort = 8789;
+      const httpServer = await runHttpServer(testPort);
+
+      try {
+        const postData = JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-1",
+          method: "tools/list",
+          params: {},
+        });
+
+        const responseText = await new Promise<string>((resolve, reject) => {
+          const req = http.request(
+            {
+              hostname: "127.0.0.1",
+              port: testPort,
+              path: "/mcp",
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json, text/event-stream",
+                "Content-Length": Buffer.byteLength(postData),
+              },
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (chunk) => (body += chunk));
+              res.on("end", () => resolve(body));
+            }
+          );
+          req.on("error", reject);
+          req.write(postData);
+          req.end();
+        });
+
+        expect(responseText).toContain('"jsonrpc":"2.0"');
+        expect(responseText).toContain("get_investigation_context");
+        expect(responseText).toContain("get_deployment_policy");
+      } finally {
+        await new Promise((resolve) => httpServer.close(resolve));
+      }
     });
   });
 });

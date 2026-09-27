@@ -23,6 +23,19 @@ tools:
     mode: gh-proxy
     toolsets: [issues, pull_requests, actions, repos]
 
+mcp-servers:
+  policy:
+    type: http
+    url: "http://localhost:8765/mcp"
+
+steps:
+  - name: Build and Start Policy MCP Server
+    run: |
+      npm ci
+      npm run build
+      node dist/mcp-policy/src/server.js --http 8765 &
+      sleep 2
+
 safe-outputs:
   create-issue:
     title-prefix: "[CI Failure] "
@@ -72,10 +85,16 @@ Classify the failure into exactly one authoritative category:
 
 ### 3. Correlate Repository & Policy Context
 1. Inspect the git diff associated with head SHA `${{ github.event.workflow_run.head_sha }}`. Identify lines in `infra/parameters/*.json` or application files that introduced the change.
-2. Read `policy/approved-deployment.json` and `policy/service-ownership.json` in the repository for authoritative rules and ownership mapping:
+2. Call the Policy MCP tool `get_investigation_context` (from the `policy` MCP server) with:
+   - `service`: "azure-functions-service"
+   - `environment`: "production"
+   - `ruleIds`: ["POL-AZ-NET-001", "POL-AZ-SKU-003"]
+   - `policyVersion`: "2026.1"
+   Extract the authoritative governance boundaries from the response:
    - **`POL-AZ-NET-001`**: Production Functions must not expose unrestricted public access (`publicNetworkAccess` must be `Disabled`).
    - **`POL-AZ-SKU-003`**: Production plans must use Elastic Premium tier `EP1` (~$145/mo). Higher tiers (`EP2` ~$290/mo, `EP3` ~$580/mo) require formal FinOps sign-off.
    - **Service Ownership**: Service `azure-functions-service` is owned by **Cloud Platform Engineering** (Channel: `#cloud-platform-security`, Lead: `tech-lead@company.internal`, FinOps: `finops@company.internal`).
+   - If the Policy MCP server is unreachable, report explicit uncertainty: "Policy registry service temporarily unavailable. Failing closed per enterprise policy." Never assume an exemption exists.
 3. Check existing issues to determine if this exact failure was already reported for this branch/PR.
 
 ### 4. Reporting & Safe Output Delivery

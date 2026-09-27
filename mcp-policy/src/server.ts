@@ -1,5 +1,7 @@
+import http from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import {
   DeploymentPolicyInputSchema,
@@ -262,9 +264,53 @@ export async function runStdioServer(): Promise<void> {
   process.stderr.write("Governed Azure Policy MCP Server active via Stdio\n");
 }
 
-if (process.argv[1] && process.argv[1].endsWith("server.js")) {
-  runStdioServer().catch((err) => {
-    process.stderr.write(`Fatal MCP Error: ${err}\n`);
-    process.exit(1);
+export async function runHttpServer(port: number = 8765): Promise<http.Server> {
+  const { server } = createGovernedPolicyServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
   });
+  await server.connect(transport);
+
+  const httpServer = http.createServer(async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "*");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204).end();
+      return;
+    }
+
+    if (req.url === "/mcp" || req.url === "/mcp/" || req.url?.startsWith("/mcp?")) {
+      await transport.handleRequest(req, res);
+    } else {
+      res.writeHead(404, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "Not Found" }));
+    }
+  });
+
+  return new Promise((resolve, reject) => {
+    httpServer.listen(port, "0.0.0.0", () => {
+      process.stderr.write(`Governed Azure Policy MCP Server active via HTTP on 0.0.0.0:${port}/mcp\n`);
+      resolve(httpServer);
+    });
+    httpServer.on("error", reject);
+  });
+}
+
+if (process.argv[1] && process.argv[1].endsWith("server.js")) {
+  const isHttp = process.argv.includes("--http") || Boolean(process.env.MCP_PORT);
+  const portArgIdx = process.argv.indexOf("--http");
+  const port = portArgIdx !== -1 && process.argv[portArgIdx + 1] ? Number(process.argv[portArgIdx + 1]) : Number(process.env.MCP_PORT || 8765);
+
+  if (isHttp) {
+    runHttpServer(port).catch((err) => {
+      process.stderr.write(`Fatal HTTP MCP Error: ${err}\n`);
+      process.exit(1);
+    });
+  } else {
+    runStdioServer().catch((err) => {
+      process.stderr.write(`Fatal Stdio MCP Error: ${err}\n`);
+      process.exit(1);
+    });
+  }
 }
