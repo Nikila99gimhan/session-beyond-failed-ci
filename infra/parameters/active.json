@@ -6,7 +6,7 @@
       "value": "production"
     },
     "appServicePlanSku": {
-      "value": "EP3"
+      "value": "EP1"
     },
     "publicNetworkAccess": {
       "value": "Enabled"
