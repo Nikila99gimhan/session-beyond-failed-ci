@@ -90,4 +90,5 @@ jobs:
           path: |
             policy-result.json
             investigation-context.json
+            infra/parameters/active.json
           retention-days: 7

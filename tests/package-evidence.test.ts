@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { generateInvestigationContext } from "../scripts/package-evidence.js";
 
 describe("Phase 2: Bounded Evidence Bundle (package-evidence)", () => {
@@ -15,6 +16,9 @@ describe("Phase 2: Bounded Evidence Bundle (package-evidence)", () => {
       samplePolicyResult,
       JSON.stringify({
         policyVersion: "2026.1",
+        status: "FAILED",
+        targetFile: "infra/parameters/noncompliant.json",
+        violationsCount: 2,
         violations: [
           {
             ruleId: "POL-AZ-NET-001",
@@ -64,6 +68,12 @@ describe("Phase 2: Bounded Evidence Bundle (package-evidence)", () => {
     expect(bundle.repository).toBe("Nikila99gimhan/session-beyond-failed-ci");
     expect(bundle.status).toBe("POLICY_REGRESSION");
     expect(bundle.violationsCount).toBe(2);
+    expect(bundle.evidenceDigest).toMatch(/^[a-f0-9]{64}$/);
+    const expectedDigest = createHash("sha256")
+      .update(fs.readFileSync(samplePolicyResult))
+      .update(fs.readFileSync("infra/parameters/noncompliant.json"))
+      .digest("hex");
+    expect(bundle.evidenceDigest).toBe(expectedDigest);
 
     const ruleIds = bundle.violations.map((v) => v.ruleId);
     expect(ruleIds).toContain("POL-AZ-NET-001");
@@ -84,9 +94,14 @@ describe("Phase 2: Bounded Evidence Bundle (package-evidence)", () => {
     }
     const outputFile = path.join(testOutputDir, "investigation-context-clean.json");
 
+    const compliantResult = path.join(testOutputDir, "compliant-policy-result.json");
+    fs.writeFileSync(compliantResult, JSON.stringify({
+      policyVersion: "2026.1", status: "PASSED",
+      targetFile: "infra/parameters/compliant.json", violationsCount: 0, violations: [],
+    }));
     const bundle = generateInvestigationContext(
       "infra/parameters/compliant.json",
-      "non-existent-result.json",
+      compliantResult,
       outputFile
     );
 
@@ -95,6 +110,22 @@ describe("Phase 2: Bounded Evidence Bundle (package-evidence)", () => {
     expect(bundle.parameterValues["appServicePlanSku"]).toBe("EP1");
     expect(bundle.parameterValues["publicNetworkAccess"]).toBe("Disabled");
 
+    fs.rmSync(testOutputDir, { recursive: true, force: true });
+  });
+
+  it("rejects missing or contradictory policy evidence instead of claiming PASS", () => {
+    fs.mkdirSync(testOutputDir, { recursive: true });
+    const resultFile = path.join(testOutputDir, "invalid-result.json");
+    const outputFile = path.join(testOutputDir, "invalid-context.json");
+    expect(() => generateInvestigationContext("infra/parameters/compliant.json", resultFile, outputFile))
+      .toThrow("Policy result is missing");
+    fs.writeFileSync(resultFile, JSON.stringify({
+      policyVersion: "2026.1", status: "PASSED",
+      targetFile: "infra/parameters/compliant.json", violationsCount: 1, violations: [],
+    }));
+    expect(() => generateInvestigationContext("infra/parameters/compliant.json", resultFile, outputFile))
+      .toThrow("Policy result is invalid");
+    expect(fs.existsSync(outputFile)).toBe(false);
     fs.rmSync(testOutputDir, { recursive: true, force: true });
   });
 });

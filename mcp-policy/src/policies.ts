@@ -422,7 +422,7 @@ export async function executeGetInvestigationContext(
     );
   }
 
-  // Server-side caller scope authorization check
+  // Fixture scope filter only. This is not caller-bound authorization for a shared service.
   const PERMITTED_SCOPES = ["production", "sub-prod-eastus-01", "sub-prod-westus-02", "default"];
   if (input.accountScope && !PERMITTED_SCOPES.includes(input.accountScope)) {
     return buildErrorEnvelope(

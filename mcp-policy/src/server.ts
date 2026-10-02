@@ -270,15 +270,6 @@ export async function runHttpServer(port: number = 8765): Promise<http.Server> {
   let sseTransport: SSEServerTransport | null = null;
 
   const httpServer = http.createServer(async (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "*");
-
-    if (req.method === "OPTIONS") {
-      res.writeHead(204).end();
-      return;
-    }
-
     // 1. SSE Connection (GET /mcp or GET /sse)
     if (req.method === "GET" && (req.url === "/mcp" || req.url === "/sse" || req.url?.startsWith("/mcp?"))) {
       sseTransport = new SSEServerTransport("/messages", res);
@@ -299,8 +290,15 @@ export async function runHttpServer(port: number = 8765): Promise<http.Server> {
     // 3. Plain JSON-RPC or direct POST /mcp fallback
     if (req.method === "POST" && (req.url === "/mcp" || req.url === "/mcp/")) {
       let raw = "";
-      req.on("data", (chunk) => (raw += chunk));
+      req.on("data", (chunk) => {
+        if (res.writableEnded) return;
+        raw += chunk;
+        if (Buffer.byteLength(raw, "utf-8") > 16384 && !res.writableEnded) {
+          res.writeHead(413, { "Content-Type": "application/json" }).end(JSON.stringify({ error: "Request too large" }));
+        }
+      });
       req.on("end", async () => {
+        if (res.writableEnded) return;
         try {
           const msg = JSON.parse(raw);
           if (msg.method === "initialize") {
@@ -392,23 +390,34 @@ export async function runHttpServer(port: number = 8765): Promise<http.Server> {
 
           if (msg.method === "tools/call") {
             const toolName = msg.params?.name;
-            const args = msg.params?.arguments || {};
+            const args = msg.params?.arguments ?? {};
             let toolResult: any;
 
-            if (toolName === "get_investigation_context") {
-              toolResult = await executeGetInvestigationContext(args, context);
-            } else if (toolName === "get_deployment_policy") {
-              toolResult = await executeGetDeploymentPolicy(args, context);
-            } else if (toolName === "get_service_ownership") {
-              toolResult = await executeGetServiceOwnership(args, context);
-            } else if (toolName === "get_approved_skus") {
-              toolResult = await executeGetApprovedSkus(args, context);
-            } else if (toolName === "get_change_window") {
-              toolResult = await executeGetChangeWindow(args, context);
-            } else {
+            const schemas = {
+              get_investigation_context: InvestigationContextInputSchema,
+              get_deployment_policy: DeploymentPolicyInputSchema,
+              get_service_ownership: ServiceOwnershipInputSchema,
+              get_approved_skus: ApprovedSkusInputSchema,
+              get_change_window: ChangeWindowInputSchema,
+            };
+            if (!(toolName in schemas)) {
               res.writeHead(400, { "Content-Type": "application/json" });
               res.end(JSON.stringify({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "Method not found" } }));
               return;
+            }
+            const parsed = schemas[toolName as keyof typeof schemas].safeParse(args);
+            if (!parsed.success) {
+              toolResult = buildErrorEnvelope(toolName, {}, "INVALID_INPUT", "Tool arguments failed schema validation", false, context);
+            } else if (toolName === "get_investigation_context") {
+              toolResult = await executeGetInvestigationContext(parsed.data as z.infer<typeof InvestigationContextInputSchema>, context);
+            } else if (toolName === "get_deployment_policy") {
+              toolResult = await executeGetDeploymentPolicy(parsed.data as z.infer<typeof DeploymentPolicyInputSchema>, context);
+            } else if (toolName === "get_service_ownership") {
+              toolResult = await executeGetServiceOwnership(parsed.data as z.infer<typeof ServiceOwnershipInputSchema>, context);
+            } else if (toolName === "get_approved_skus") {
+              toolResult = await executeGetApprovedSkus(parsed.data as z.infer<typeof ApprovedSkusInputSchema>, context);
+            } else {
+              toolResult = await executeGetChangeWindow(parsed.data as z.infer<typeof ChangeWindowInputSchema>, context);
             }
 
             res.writeHead(200, { "Content-Type": "application/json" });

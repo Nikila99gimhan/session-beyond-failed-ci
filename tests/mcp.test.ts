@@ -325,6 +325,23 @@ describe("Read-Only Policy MCP Server", () => {
         expect(responseText).toContain('"jsonrpc":"2.0"');
         expect(responseText).toContain("get_investigation_context");
         expect(responseText).toContain("get_deployment_policy");
+
+        const invalidCall = await fetch(`http://127.0.0.1:${testPort}/mcp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: "invalid", method: "tools/call", params: {
+            name: "get_investigation_context", arguments: { service: "azure-functions-service", environment: "production", ruleIds: "POL-AZ-NET-001" },
+          } }),
+        });
+        const invalidBody = await invalidCall.json() as any;
+        expect(JSON.parse(invalidBody.result.content[0].text).error.code).toBe("INVALID_INPUT");
+
+        const oversizedCall = await fetch(`http://127.0.0.1:${testPort}/mcp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "x".repeat(16385),
+        });
+        expect(oversizedCall.status).toBe(413);
       } finally {
         await new Promise((resolve) => httpServer.close(resolve));
       }
