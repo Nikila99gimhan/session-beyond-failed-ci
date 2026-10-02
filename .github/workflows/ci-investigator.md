@@ -35,6 +35,15 @@ steps:
       npm run build
       node dist/mcp-policy/src/server.js --http 8765 &
       sleep 2
+  - name: Download Source Policy Evidence
+    uses: actions/download-artifact@v8.0.1
+    continue-on-error: true
+    with:
+      name: policy-result
+      run-id: ${{ github.event.workflow_run.id }}
+      repository: ${{ github.repository }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+      path: ci-policy-evidence
 
 safe-outputs:
   create-issue:
@@ -81,7 +90,7 @@ Execute the following sequential investigation steps:
 ### 1. Triage the Failure
 1. Inspect the workflow run and list its jobs (`application-tests`, `bicep-validation`, `deployment-policy`).
 2. Identify the earliest failed job and extract the primary error message and exit code.
-3. If `deployment-policy` failed, read the `policy-result` artifact from this exact repository, source run ID, and attempt. It contains `investigation-context.json`, `policy-result.json`, and the exact `infra/parameters/active.json` evaluated by CI. Check that the bundle's repository, run ID, attempt, and head SHA match this event. Its `evidenceDigest` is SHA-256 of the raw policy-result bytes followed by the raw active parameter bytes. If retrieval, binding, or verification fails, use the source job log only as a labeled fallback. Do not describe fallback logs as the bounded bundle. Never treat missing policy evidence as a passing check.
+3. If `deployment-policy` failed, read the runner-downloaded files in `ci-policy-evidence/` first; this directory is from the source run's `policy-result` artifact, not the trusted automation checkout. It contains `investigation-context.json`, `policy-result.json`, and the exact `infra/parameters/active.json` evaluated by CI. Check that the bundle's repository, run ID, attempt, and head SHA match this event. Its `evidenceDigest` is SHA-256 of the raw policy-result bytes followed by the raw active parameter bytes. If the files are absent or verification fails, use the source job log only as a labeled fallback. Do not describe fallback logs as the bounded bundle. Never treat missing policy evidence as a passing check.
 
 ### 2. Failure Classification
 Classify the failure into exactly one authoritative category:
