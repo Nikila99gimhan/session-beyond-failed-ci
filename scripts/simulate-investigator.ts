@@ -90,41 +90,23 @@ async function runSimulation() {
   console.log(`- MCP get_service_ownership: ${ownerRes.status}`);
   console.log(`- MCP get_change_window:     ${changeRes.status}\n`);
 
-  const ownerData: any = ownerRes.data || { ownerTeam: "Unknown", serviceTier: "Unknown", slackChannel: "Unknown" };
-  const skuData: any = skuRes.data || {};
-  const violations = policyResult?.violations || [
-    {
-      ruleId: "POL-AZ-NET-001",
-      name: "Prohibit Public Ingress on Production Functions",
-      severity: "High",
-      actualValue: "Enabled",
-      expectedValue: "Disabled",
-      filePath: "infra/parameters/active.json",
-      complianceStandard: "NIST-SP-800-53 / CIS-Azure-9.1",
-    },
-    {
-      ruleId: "POL-AZ-SKU-003",
-      name: "Approved Hosting Plan Tier Limit",
-      severity: "Medium",
-      actualValue: "EP3",
-      expectedValue: "EP1",
-      filePath: "infra/parameters/active.json",
-      complianceStandard: "FinOps-Gov-2026",
-    },
-  ];
+  const ownerData: any = ownerRes.status === "SUCCESS" ? ownerRes.data : null;
+  const skuData: any = skuRes.status === "SUCCESS" ? skuRes.data : null;
+  const violations = policyResult?.status === "FAILED" && Array.isArray(policyResult.violations) ? policyResult.violations : [];
 
   const missingContexts: string[] = [];
-  if (simulateMissingContext || skuRes.status === "ERROR") {
-    missingContexts.push("Policy SKU catalog temporarily unreachable (`DEPENDENCY_UNAVAILABLE`). SKU approval boundaries evaluated using cached assumptions.");
-  }
+  if (!policyResult || policyResult.status !== "FAILED") missingContexts.push("Policy result missing or not a failed result; violation details unverified.");
+  if (skuRes.status !== "SUCCESS") missingContexts.push("SKU approval status unavailable from the policy registry; no exception inferred.");
+  if (ownerRes.status !== "SUCCESS") missingContexts.push("Service ownership unavailable from the policy registry.");
+  if (changeRes.status !== "SUCCESS") missingContexts.push("Change window unavailable from the policy registry.");
 
   const report = `
 ## 🔍 Investigation Summary
 - **Triggering Workflow**: \`CI\` (Run #103)
 - **Commit / Ref**: \`c3b4e12\`
-- **Classification**: \`POLICY_REGRESSION\`
-- **Owning Team**: ${ownerData.ownerTeam} (Channel: \`${ownerData.slackChannel}\`)
-- **Service Tier**: ${ownerData.serviceTier}
+- **Classification**: \`${violations.length ? "POLICY_REGRESSION" : "UNVERIFIED_FAILURE"}\`
+- **Owning Team**: ${ownerData?.ownerTeam || "Unknown"} (Channel: \`${ownerData?.slackChannel || "Unknown"}\`)
+- **Service Tier**: ${ownerData?.serviceTier || "Unknown"}
 
 ## 📋 Observed CI Evidence
 - **Earliest Failed Job**: \`deployment-policy\`
@@ -137,16 +119,16 @@ ${violations.map((v: any) => `  - **Rule \`${v.ruleId}\`** (${v.severity}): ${v.
     - Standard: ${v.complianceStandard}`).join("\n")}
 
 ## 🏢 Organizational Policy Context (MCP v2026.1)
-- **Cost / Capacity Boundary**: Approved tier is \`${(skuData.approvedSkus || ["EP1"]).join(", ")}\`. Proposed \`EP3\` incurs high operational expense (~$580/mo vs baseline ~$145/mo).
-- **Network Ingress Boundary**: Ingress must be restricted (\`Disabled\`). Direct public endpoints on production workloads violate security policy.
-- **Change Window Status**: \`${(changeRes.data as any)?.status || "OPEN"}\` (${(changeRes.data as any)?.activeWindow || "Standard"})
+- **SKU Approval Boundary**: ${skuData ? `Approved tier(s): \`${skuData.approvedSkus.join(", ")}\`.` : "Unverified: policy registry unavailable."}
+- **Network Ingress Boundary**: ${netPolicyRes.status === "SUCCESS" ? "See returned policy rule for permitted ingress." : "Unverified: policy registry unavailable."}
+- **Change Window Status**: \`${changeRes.status === "SUCCESS" ? (changeRes.data as any)?.status : "Unknown"}\`
 
 ## ⚖️ Root Cause & Alternatives
-- **Primary Root Cause**: Parameter configuration in \`infra/parameters/active.json\` introduced noncompliant hosting plan tier (\`EP3\`) and public network ingress (\`Enabled\`).
-- **Alternative Explanations Considered**: Configuration could be intended for an isolated non-production sandbox, but targetEnvironment is explicitly set to \`production\`.
+- **Primary Root Cause**: ${violations.length ? "The local deterministic policy result reports the parameter values listed above as violations." : "Unknown; no failed policy result was available."}
+- **Alternative Explanations Considered**: A different environment or exception would need separate evidence; neither is established by this simulation.
 
 ## ❓ Missing Evidence & Unknowns
-${missingContexts.length > 0 ? missingContexts.map(m => `- ${m}`).join("\n") : "- None. All 4 policy MCP tools returned verifiable, authoritative records."}
+${missingContexts.length > 0 ? missingContexts.map(m => `- ${m}`).join("\n") : "- No missing policy context in this local simulation."}
 
 ## 🛠️ Verification & Recommended Next Steps (Human Handoff)
 1. **Option A (Compliant Resolution)**:
@@ -154,14 +136,17 @@ ${missingContexts.length > 0 ? missingContexts.map(m => `- ${m}`).join("\n") : "
    - Set \`publicNetworkAccess\` to \`Disabled\`
    - Verify locally with: \`npm run validate:policy\`
 2. **Option B (Governed Exception)**:
-   - If \`EP3\` and public ingress are mandatory for this service, contact **${ownerData.ownerTeam}** in \`${ownerData.slackChannel}\` to initiate a formal architectural exception.
+   - If higher capacity or public ingress is required, consult **${ownerData?.ownerTeam || "the service owner (unverified)"}** through \`${ownerData?.slackChannel || "an independently verified channel"}\` about an exception.
 `;
 
-  console.log("📝 Generated Agent Issue (Safe Output: create-issue):");
+  console.log("📝 Local simulated handoff (no GitHub write):");
   console.log(report);
 
   fs.writeFileSync("investigation-report.md", report.trim(), "utf-8");
-  console.log("Evidence-backed report saved to: investigation-report.md\n");
+  console.log("Local simulation report saved to: investigation-report.md (not a live agent or writer test)\n");
 }
 
-runSimulation().catch(console.error);
+runSimulation().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

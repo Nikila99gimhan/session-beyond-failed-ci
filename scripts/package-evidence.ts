@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 
 export interface BoundedViolation {
   ruleId: string;
@@ -44,41 +45,50 @@ export function generateInvestigationContext(
   const resolvedPolicyResult = path.resolve(process.cwd(), policyResultFile);
   const resolvedOutput = path.resolve(process.cwd(), outputFile);
 
-  let violations: BoundedViolation[] = [];
-  let policyVersion = "2026.1";
-
-  if (fs.existsSync(resolvedPolicyResult)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(resolvedPolicyResult, "utf-8"));
-      policyVersion = parsed.policyVersion || "2026.1";
-      if (Array.isArray(parsed.violations)) {
-        violations = parsed.violations.map((v: any) => ({
-          ruleId: String(v.ruleId),
-          name: String(v.name),
-          severity: String(v.severity),
-          field: String(v.field),
-          actualValue: v.actualValue,
-          expectedValue: v.expectedValue,
-          complianceStandard: String(v.complianceStandard || "NIST-SP-800-53"),
-          description: String(v.description || ""),
-        }));
-      }
-    } catch {
-      // Fall through to empty violations
-    }
+  if (!fs.existsSync(resolvedPolicyResult)) {
+    throw new Error(`Policy result is missing: ${policyResultFile}`);
+  }
+  if (!fs.existsSync(resolvedTarget)) {
+    throw new Error(`Parameter file is missing: ${targetFile}`);
   }
 
-  let paramValues: Record<string, unknown> = {};
-  if (fs.existsSync(resolvedTarget)) {
-    try {
-      const parsedParam = JSON.parse(fs.readFileSync(resolvedTarget, "utf-8"));
-      const rawParams = parsedParam.parameters || {};
-      for (const [k, v] of Object.entries(rawParams)) {
-        paramValues[k] = (v as any)?.value;
-      }
-    } catch {
-      // Fall through to empty parameters
+  const policyBytes = fs.readFileSync(resolvedPolicyResult);
+  const parameterBytes = fs.readFileSync(resolvedTarget);
+  let resultStatus: "PASSED" | "FAILED";
+  let policyVersion: string;
+  let violations: BoundedViolation[];
+  try {
+    const parsed = JSON.parse(policyBytes.toString("utf-8"));
+    if (parsed.status !== "PASSED" && parsed.status !== "FAILED") throw new Error("invalid status");
+    if (!Array.isArray(parsed.violations) || parsed.violationsCount !== parsed.violations.length) throw new Error("invalid violation count");
+    if (parsed.status !== (parsed.violations.length ? "FAILED" : "PASSED")) throw new Error("status disagrees with violations");
+    if (path.resolve(process.cwd(), parsed.targetFile) !== resolvedTarget) throw new Error("target file mismatch");
+    if (typeof parsed.policyVersion !== "string" || !parsed.policyVersion) throw new Error("missing policy version");
+    resultStatus = parsed.status;
+    policyVersion = parsed.policyVersion;
+    violations = parsed.violations.map((v: any) => ({
+      ruleId: String(v.ruleId),
+      name: String(v.name),
+      severity: String(v.severity),
+      field: String(v.field),
+      actualValue: v.actualValue,
+      expectedValue: v.expectedValue,
+      complianceStandard: String(v.complianceStandard || "NIST-SP-800-53"),
+      description: String(v.description || ""),
+    }));
+  } catch (error) {
+    throw new Error(`Policy result is invalid: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const paramValues: Record<string, unknown> = {};
+  try {
+    const parsedParam = JSON.parse(parameterBytes.toString("utf-8"));
+    if (!parsedParam.parameters || typeof parsedParam.parameters !== "object") throw new Error("missing parameters");
+    for (const [k, v] of Object.entries(parsedParam.parameters)) {
+      paramValues[k] = (v as any)?.value;
     }
+  } catch (error) {
+    throw new Error(`Parameter file is invalid: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const runId = Number(process.env.GITHUB_RUN_ID || 0);
@@ -100,12 +110,12 @@ export function generateInvestigationContext(
     accountScope: "production",
     earliestFailedJob: "deployment-policy",
     policyVersion,
-    status: violations.length > 0 ? "POLICY_REGRESSION" : "PASS",
+    status: resultStatus === "FAILED" ? "POLICY_REGRESSION" : "PASS",
     violationsCount: violations.length,
     violations,
     affectedFiles: [targetFile],
     parameterValues: paramValues,
-    evidenceDigest: "",
+    evidenceDigest: createHash("sha256").update(policyBytes).update(parameterBytes).digest("hex"),
   };
 
   const serialized = JSON.stringify(bundle, null, 2);
