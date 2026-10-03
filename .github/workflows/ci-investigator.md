@@ -8,7 +8,7 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-    branches: [main, baseline, policy-regression]
+    branches: [main, baseline, policy-regression, codex/security-multi-violation-demo]
 
 if: ${{ github.event.workflow_run.conclusion == 'failure' && vars.DISABLE_CI_INVESTIGATOR != 'true' }}
 
@@ -104,8 +104,8 @@ Classify the failure into exactly one authoritative category:
 2. For a verified policy failure, call the Policy MCP tool `get_investigation_context` (from the `policy` MCP server) with:
    - `service`: "azure-functions-service"
    - `environment`: "production"
-   - `ruleIds`: ["POL-AZ-NET-001", "POL-AZ-SKU-003"]
-   - `policyVersion`: "2026.1"
+   - `ruleIds`: ["POL-AZ-NET-001", "POL-AZ-SKU-003", "POL-AZ-AUTH-004", "POL-AZ-PRIV-005"]
+   - `policyVersion`: "2026.2"
    Use policy rules, approvals, and ownership only when the tool returns `SUCCESS` at the expected version. A failed call leaves those details unverified; the deterministic CI finding can still be reported as such. Never infer an exemption.
 3. Check existing issues to determine if this exact failure was already reported for this branch/PR.
 

@@ -73,12 +73,12 @@ describe("Read-Only Policy MCP Server", () => {
       expect(result.evaluatedAt).toBe(fixedDate.toISOString());
 
       const data = result.data as Array<{ policyId: string; severity: string; rule: string }>;
-      expect(data).toHaveLength(1);
+      expect(data).toHaveLength(3);
       expect(data[0].policyId).toBe("POL-AZ-NET-001");
       expect(data[0].severity).toBe("High");
       expect(data[0].rule).toContain("publicNetworkAccess must be explicitly set to 'Disabled'");
 
-      expect(result.evidence).toHaveLength(1);
+      expect(result.evidence).toHaveLength(3);
       expect(result.evidence[0].policyId).toBe("POL-AZ-NET-001");
       expect(result.evidence[0].source).toBe("enterprise-policy-registry");
     });
@@ -178,7 +178,7 @@ describe("Read-Only Policy MCP Server", () => {
         {
           service: "azure-functions-service",
           environment: "production",
-          ruleIds: ["POL-AZ-NET-001", "POL-AZ-SKU-003"],
+          ruleIds: ["POL-AZ-NET-001", "POL-AZ-SKU-003", "POL-AZ-AUTH-004", "POL-AZ-PRIV-005"],
         },
         deterministicContext
       );
@@ -191,15 +191,17 @@ describe("Read-Only Policy MCP Server", () => {
       expect(data.serviceOwnership.ownerTeam).toBe("Cloud Platform Engineering");
       expect(data.approvedSkus.approvedSkus).toEqual(["EP1"]);
       expect(data.approvedSkus.restrictedSkus).toContain("EP3");
-      expect(data.applicableRules).toHaveLength(2);
+      expect(data.applicableRules).toHaveLength(4);
       expect(data.freshness.isFresh).toBe(true);
-      expect(data.freshness.policyVersion).toBe("2026.1");
+      expect(data.freshness.policyVersion).toBe("2026.2");
 
       // Verify evidence consolidation
       expect(result.evidence.length).toBeGreaterThanOrEqual(3);
       const policyIds = result.evidence.map((e) => e.policyId);
       expect(policyIds).toContain("POL-AZ-NET-001");
       expect(policyIds).toContain("POL-AZ-SKU-003");
+      expect(policyIds).toContain("POL-AZ-AUTH-004");
+      expect(policyIds).toContain("POL-AZ-PRIV-005");
       expect(policyIds).toContain("SVC-OWN-001");
     });
 

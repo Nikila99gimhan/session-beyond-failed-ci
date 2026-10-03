@@ -1,6 +1,6 @@
 {
-  "policyVersion": "2026.1",
-  "lastUpdated": "2026-01-15T00:00:00Z",
+  "policyVersion": "2026.2",
+  "lastUpdated": "2026-10-03T00:00:00Z",
   "environment": "production",
   "rules": [
     {
@@ -29,6 +29,26 @@
       "severity": "Medium",
       "description": "Production plans must use Elastic Premium tier EP1 (~$145/mo). Higher tiers (EP2 ~$290/mo, EP3 ~$580/mo) require formal FinOps sign-off.",
       "complianceStandard": "FinOps-Gov-2026"
+    },
+    {
+      "ruleId": "POL-AZ-AUTH-004",
+      "name": "Require Application Authentication on Production Functions",
+      "resourceType": "Microsoft.Web/sites",
+      "field": "enableAuthentication",
+      "expectedValue": "true",
+      "severity": "High",
+      "description": "The sample organization's production Function workload must enable application authentication.",
+      "complianceStandard": "Sample-Org-Access-Control-2026"
+    },
+    {
+      "ruleId": "POL-AZ-PRIV-005",
+      "name": "Require Private Networking on Production Functions",
+      "resourceType": "Microsoft.Web/sites",
+      "field": "enablePrivateNetworking",
+      "expectedValue": "true",
+      "severity": "High",
+      "description": "The sample organization's production Function workload must provision its private networking path.",
+      "complianceStandard": "Sample-Org-Network-Control-2026"
     }
   ]
 }

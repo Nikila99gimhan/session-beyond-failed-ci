@@ -19,12 +19,12 @@ describe("Deterministic Policy Checker", () => {
     expect(result.status).toBe("PASSED");
     expect(result.violationsCount).toBe(0);
     expect(result.violations).toHaveLength(0);
-    expect(result.policyVersion).toBe("2026.1");
+    expect(result.policyVersion).toBe("2026.2");
 
     if (fs.existsSync(resultPath)) fs.unlinkSync(resultPath);
   });
 
-  it("should fail validation with exactly two violations on noncompliant.json", () => {
+  it("should fail validation with exactly four violations on noncompliant.json", () => {
     if (fs.existsSync(resultPath)) fs.unlinkSync(resultPath);
 
     const cmd = `npx tsx scripts/validate-deployment-policy.ts infra/parameters/noncompliant.json test-policy-result.json`;
@@ -44,11 +44,13 @@ describe("Deterministic Policy Checker", () => {
     expect(fs.existsSync(resultPath)).toBe(true);
     const result = JSON.parse(fs.readFileSync(resultPath, "utf-8"));
     expect(result.status).toBe("FAILED");
-    expect(result.violationsCount).toBe(2);
+    expect(result.violationsCount).toBe(4);
 
     const ruleIds = result.violations.map((v: any) => v.ruleId);
     expect(ruleIds).toContain("POL-AZ-NET-001");
     expect(ruleIds).toContain("POL-AZ-SKU-003");
+    expect(ruleIds).toContain("POL-AZ-AUTH-004");
+    expect(ruleIds).toContain("POL-AZ-PRIV-005");
 
     const netViolation = result.violations.find((v: any) => v.ruleId === "POL-AZ-NET-001");
     expect(netViolation.actualValue).toBe("Enabled");
@@ -57,6 +59,14 @@ describe("Deterministic Policy Checker", () => {
     const skuViolation = result.violations.find((v: any) => v.ruleId === "POL-AZ-SKU-003");
     expect(skuViolation.actualValue).toBe("EP3");
     expect(skuViolation.expectedValue).toContain("EP1");
+
+    const authViolation = result.violations.find((v: any) => v.ruleId === "POL-AZ-AUTH-004");
+    expect(authViolation.actualValue).toBe(false);
+    expect(authViolation.expectedValue).toBe("true");
+
+    const privateNetworkViolation = result.violations.find((v: any) => v.ruleId === "POL-AZ-PRIV-005");
+    expect(privateNetworkViolation.actualValue).toBe(false);
+    expect(privateNetworkViolation.expectedValue).toBe("true");
 
     if (fs.existsSync(resultPath)) fs.unlinkSync(resultPath);
   });

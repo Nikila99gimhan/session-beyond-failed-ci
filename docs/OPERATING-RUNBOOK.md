@@ -20,7 +20,7 @@ The Governed CI Investigation Agent is an analytical workflow triggered on faile
 | Scenario | Local Command | Expected CI Outcome | Investigator Action |
 |---|---|---|---|
 | **Compliant Baseline** | `npm run scenario:compliant` | Green (`0` violations, pass) | Skipped (`conclusion != 'failure'`) |
-| **Policy Regression** | `npm run scenario:regression` | Red (2 violations: `POL-AZ-NET-001`, `POL-AZ-SKU-003`) | Creates Issue or updates canonical occurrence |
+| **Policy Regression** | `npm run scenario:regression` | Red (4 violations: `POL-AZ-NET-001`, `POL-AZ-SKU-003`, `POL-AZ-AUTH-004`, `POL-AZ-PRIV-005`) | Creates one issue or updates canonical occurrence |
 | **Unrelated Failure** | `FAIL_APP_TEST=true npm test` | Red (`application-tests` failure) | Classifies as `CODE_OR_TEST_FAILURE` |
 | **MCP Outage** | `npm run play:missing-mcp` | Local simulation after a red policy check | Reports policy context as unverified; no live agent/writer is exercised |
 

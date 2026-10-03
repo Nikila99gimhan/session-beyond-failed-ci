@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, baseline, policy-regression]
+    branches: [main, baseline, policy-regression, codex/security-multi-violation-demo]
   pull_request:
     branches: [main]
   workflow_dispatch:

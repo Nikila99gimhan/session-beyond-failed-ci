@@ -69,6 +69,28 @@ export class FixturePolicyRepository implements IPolicyRepository {
             humanSecurityReviewRequired: true,
             complianceStandard: "NIST-SP-800-53 / CIS-Azure-9.1",
           },
+          {
+            policyId: "POL-AZ-AUTH-004",
+            name: "Require Application Authentication on Production Functions",
+            environment: "production",
+            resourceType: "Microsoft.Web/sites",
+            rule: "enableAuthentication must be true for the sample organization's production Function workload.",
+            description: "Production Function application authentication must be enabled",
+            severity: "High",
+            humanSecurityReviewRequired: true,
+            complianceStandard: "Sample-Org-Access-Control-2026",
+          },
+          {
+            policyId: "POL-AZ-PRIV-005",
+            name: "Require Private Networking on Production Functions",
+            environment: "production",
+            resourceType: "Microsoft.Web/sites",
+            rule: "enablePrivateNetworking must be true for the sample organization's production Function workload.",
+            description: "Production Function private networking path must be provisioned",
+            severity: "High",
+            humanSecurityReviewRequired: true,
+            complianceStandard: "Sample-Org-Network-Control-2026",
+          },
         ];
       }
 
@@ -248,7 +270,7 @@ export class CachedPolicyRepository implements IPolicyRepository {
     return `${this.tenantId}::${tool}::${paramKey}`;
   }
 
-  private getCached<T>(key: string, requiredVersion: string = "2026.1"): T | null {
+  private getCached<T>(key: string, requiredVersion: string = "2026.2"): T | null {
     const entry = this.cache.get(key);
     if (!entry) {
       this.stats.misses++;
@@ -274,7 +296,7 @@ export class CachedPolicyRepository implements IPolicyRepository {
     return entry.data as T;
   }
 
-  private setCached<T>(key: string, data: T, policyVersion: string = "2026.1"): void {
+  private setCached<T>(key: string, data: T, policyVersion: string = "2026.2"): void {
     const now = Date.now();
     this.cache.set(key, {
       data,

@@ -9,10 +9,10 @@ This guide details the five experimental scenarios defined in the workshop plan,
 | Scenario | Trigger / State | Expected CI Outcome | Investigator Agent Action |
 |---|---|---|---|
 | **A: Compliant Baseline** | `infra/parameters/compliant.json` | All checks pass (Green) | Does not run (`conclusion == success`) |
-| **B: Policy Regression** | `infra/parameters/noncompliant.json` | `deployment-policy` fails with 2 violations | Runs; creates handoff issue citing `POL-AZ-NET-001`, `POL-AZ-SKU-003`, owning team, and resolution options |
+| **B: Policy Regression** | `infra/parameters/noncompliant.json` | `deployment-policy` fails with 4 violations | Runs; creates one handoff issue citing all four policy rules, owning team, and resolution options |
 | **C: Unrelated Failure** | Failing test in `tests/hello.test.ts` | `application-tests` fails; policy check skipped/not run | Runs; classifies as `CODE_OR_TEST_FAILURE`; avoids policy diagnosis |
 | **D: Missing Policy Context** | MCP server policy endpoint simulated outage | `deployment-policy` fails | Runs; notes missing policy context under "Missing Evidence & Unknowns"; does not hallucinate policy |
-| **E: Repeated Failure** | Repeat of Scenario B on same branch/PR | Same 2 violations | Updates existing issue or references prior run; avoids issue spam |
+| **E: Repeated Failure** | Repeat of Scenario B on same branch/PR | Same 4 violations | Updates existing issue or references prior run; avoids issue spam |
 
 ---
 
@@ -34,7 +34,7 @@ This guide details the five experimental scenarios defined in the workshop plan,
    - `policy-checker.test.ts` passes.
    - `validate:policy` outputs:
      ```text
-     [POLICY-CHECK:PASS] All 2 deployment policies satisfied for infra/parameters/active.json (Policy v2026.1).
+     [POLICY-CHECK:PASS] All 4 deployment policies satisfied for infra/parameters/active.json (Policy v2026.2).
      ```
    - Exit code: `0`.
    - In GitHub Actions: `CI` workflow is fully green. `ci-investigator` workflow is skipped or takes no action.
@@ -53,14 +53,16 @@ This guide details the five experimental scenarios defined in the workshop plan,
    ```
 3. **Observed Outcome**:
    - Policy checker exits with code `1`.
-   - CLI output highlights two distinct violations:
+   - CLI output highlights four distinct violations:
      - `POL-AZ-NET-001`: `publicNetworkAccess` is `Enabled` (expected `Disabled`).
      - `POL-AZ-SKU-003`: `appServicePlanSku` is `EP3` (expected `EP1`).
+     - `POL-AZ-AUTH-004`: `enableAuthentication` is `false` (expected `true`).
+     - `POL-AZ-PRIV-005`: `enablePrivateNetworking` is `false` (expected `true`).
    - Machine-readable `policy-result.json` is generated.
 4. **Investigator Agent Triage**:
    - Triggers on `workflow_run` failure.
    - Downloads `policy-result.json`.
-   - Calls `get_deployment_policy`, `get_approved_skus`, and `get_service_ownership`.
+   - Calls `get_investigation_context` for the four violated rules, ownership, and approved SKUs.
    - Identifies:
      - Owning team: **Cloud Platform Engineering** (`#cloud-platform-security`).
      - Cost delta: EP3 (~$580/mo) vs EP1 (~$145/mo).

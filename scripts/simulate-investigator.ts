@@ -118,7 +118,7 @@ ${violations.map((v: any) => `  - **Rule \`${v.ruleId}\`** (${v.severity}): ${v.
     - File Reference: \`${v.filePath}\`
     - Standard: ${v.complianceStandard}`).join("\n")}
 
-## 🏢 Organizational Policy Context (MCP v2026.1)
+## 🏢 Organizational Policy Context (MCP v2026.2)
 - **SKU Approval Boundary**: ${skuData ? `Approved tier(s): \`${skuData.approvedSkus.join(", ")}\`.` : "Unverified: policy registry unavailable."}
 - **Network Ingress Boundary**: ${netPolicyRes.status === "SUCCESS" ? "See returned policy rule for permitted ingress." : "Unverified: policy registry unavailable."}
 - **Change Window Status**: \`${changeRes.status === "SUCCESS" ? (changeRes.data as any)?.status : "Unknown"}\`
