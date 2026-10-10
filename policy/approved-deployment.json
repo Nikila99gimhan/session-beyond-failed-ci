@@ -1,6 +1,6 @@
 {
-  "policyVersion": "2026.2",
-  "lastUpdated": "2026-10-03T00:00:00Z",
+  "policyVersion": "2026.3",
+  "lastUpdated": "2026-10-11T00:00:00Z",
   "environment": "production",
   "rules": [
     {
@@ -20,14 +20,14 @@
       "field": "appServicePlanSku",
       "expectedValue": "EP1",
       "allowedValues": [
-        "EP1"
+        "EP1",
+        "EP2"
       ],
       "restrictedValues": [
-        "EP2",
         "EP3"
       ],
       "severity": "Medium",
-      "description": "Production plans must use Elastic Premium tier EP1 (~$145/mo). Higher tiers (EP2 ~$290/mo, EP3 ~$580/mo) require formal FinOps sign-off.",
+      "description": "Demo proposal: EP1 remains the default and EP2 is also allowed; EP3 still requires formal FinOps sign-off. Consumer impact outside this repository has not been assessed.",
       "complianceStandard": "FinOps-Gov-2026"
     },
     {

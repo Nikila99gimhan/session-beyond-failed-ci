@@ -34,7 +34,7 @@ This guide details the five experimental scenarios defined in the workshop plan,
    - `policy-checker.test.ts` passes.
    - `validate:policy` outputs:
      ```text
-     [POLICY-CHECK:PASS] All 4 deployment policies satisfied for infra/parameters/active.json (Policy v2026.2).
+     [POLICY-CHECK:PASS] All 4 deployment policies satisfied for infra/parameters/active.json (Policy v2026.3).
      ```
    - Exit code: `0`.
    - In GitHub Actions: `CI` workflow is fully green. `ci-investigator` workflow is skipped or takes no action.
