@@ -110,7 +110,7 @@ describe("Read-Only Policy MCP Server", () => {
       expect(result.tool).toBe("get_approved_skus");
 
       const data = result.data as { approvedSkus: string[]; restrictedSkus: string[]; finOpsApprovalRequired: boolean };
-      expect(data.approvedSkus).toEqual(["EP1"]);
+      expect(data.approvedSkus).toEqual(["EP1", "EP2"]);
       expect(data.restrictedSkus).toContain("EP3");
       expect(data.finOpsApprovalRequired).toBe(true);
       expect(result.evidence[0].policyId).toBe("FINOPS-SKU-001");
@@ -189,11 +189,11 @@ describe("Read-Only Policy MCP Server", () => {
 
       const data = result.data as any;
       expect(data.serviceOwnership.ownerTeam).toBe("Cloud Platform Engineering");
-      expect(data.approvedSkus.approvedSkus).toEqual(["EP1"]);
+      expect(data.approvedSkus.approvedSkus).toEqual(["EP1", "EP2"]);
       expect(data.approvedSkus.restrictedSkus).toContain("EP3");
       expect(data.applicableRules).toHaveLength(4);
       expect(data.freshness.isFresh).toBe(true);
-      expect(data.freshness.policyVersion).toBe("2026.2");
+      expect(data.freshness.policyVersion).toBe("2026.3");
 
       // Verify evidence consolidation
       expect(result.evidence.length).toBeGreaterThanOrEqual(3);
@@ -247,13 +247,13 @@ describe("Read-Only Policy MCP Server", () => {
 
       // Cold call
       const res1 = await cachedRepo.getApprovedSkus("production");
-      expect(res1?.approvedSkus).toEqual(["EP1"]);
+      expect(res1?.approvedSkus).toEqual(["EP1", "EP2"]);
       expect(cachedRepo.getStats().misses).toBe(1);
       expect(cachedRepo.getStats().hits).toBe(0);
 
       // Warm call (should hit cache)
       const res2 = await cachedRepo.getApprovedSkus("production");
-      expect(res2?.approvedSkus).toEqual(["EP1"]);
+      expect(res2?.approvedSkus).toEqual(["EP1", "EP2"]);
       expect(cachedRepo.getStats().hits).toBe(1);
       expect(cachedRepo.getStats().misses).toBe(1);
     });

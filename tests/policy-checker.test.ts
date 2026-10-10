@@ -19,7 +19,7 @@ describe("Deterministic Policy Checker", () => {
     expect(result.status).toBe("PASSED");
     expect(result.violationsCount).toBe(0);
     expect(result.violations).toHaveLength(0);
-    expect(result.policyVersion).toBe("2026.2");
+    expect(result.policyVersion).toBe("2026.3");
 
     if (fs.existsSync(resultPath)) fs.unlinkSync(resultPath);
   });
@@ -67,6 +67,22 @@ describe("Deterministic Policy Checker", () => {
     const privateNetworkViolation = result.violations.find((v: any) => v.ruleId === "POL-AZ-PRIV-005");
     expect(privateNetworkViolation.actualValue).toBe(false);
     expect(privateNetworkViolation.expectedValue).toBe("true");
+
+    if (fs.existsSync(resultPath)) fs.unlinkSync(resultPath);
+  });
+
+  it("shows the illustrative EP2 consumer now passes the proposed catalog", () => {
+    if (fs.existsSync(resultPath)) fs.unlinkSync(resultPath);
+
+    execSync(
+      "npx tsx scripts/validate-deployment-policy.ts infra/parameters/illustrative-consumer-ep2.json test-policy-result.json",
+      { cwd: path.resolve(__dirname, ".."), encoding: "utf-8" }
+    );
+
+    const result = JSON.parse(fs.readFileSync(resultPath, "utf-8"));
+    expect(result.status).toBe("PASSED");
+    expect(result.violationsCount).toBe(0);
+    expect(result.policyVersion).toBe("2026.3");
 
     if (fs.existsSync(resultPath)) fs.unlinkSync(resultPath);
   });

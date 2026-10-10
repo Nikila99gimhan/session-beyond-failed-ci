@@ -14,7 +14,7 @@ import {
 } from "./types.js";
 import { IPolicyRepository, FixturePolicyRepository } from "./repository.js";
 
-export const POLICY_VERSION = "2026.2";
+export const POLICY_VERSION = "2026.3";
 export const SCHEMA_VERSION = "1.0.0" as const;
 
 export interface ToolContext {
@@ -520,7 +520,7 @@ export async function executeGetInvestigationContext(
         evaluatedAt: context.now().toISOString(),
         isFresh: true,
         ttlSeconds: 300,
-        sourceUrl: "https://governance.internal/policies/v2026.2",
+        sourceUrl: "https://governance.internal/policies/v2026.3",
       },
       exceptions: [],
     };

@@ -117,7 +117,7 @@ export class FixturePolicyRepository implements IPolicyRepository {
             name: "Approved Hosting Plan Tier Limit",
             environment: "production",
             resourceType: "Microsoft.Web/serverfarms",
-            rule: "Production plans must use Elastic Premium tier EP1. Higher tiers require FinOps sign-off.",
+            rule: "Demo proposal: production plans may use EP1 or EP2. EP3 requires FinOps sign-off.",
             description: "Workload SKU must match approved capacity tier",
             severity: "Medium",
             humanSecurityReviewRequired: false,
@@ -153,10 +153,10 @@ export class FixturePolicyRepository implements IPolicyRepository {
     if (environment === "production") {
       return {
         environment: "production",
-        approvedSkus: ["EP1"],
-        restrictedSkus: ["EP2", "EP3"],
-        maxTier: "ElasticPremium-1 (EP1)",
-        costPolicyRule: "Requested SKU exceeds the approved workload tier. Production functions must default to EP1. Higher tiers require FinOps exemption.",
+        approvedSkus: ["EP1", "EP2"],
+        restrictedSkus: ["EP3"],
+        maxTier: "ElasticPremium-2 (EP2)",
+        costPolicyRule: "Demo proposal: production functions may use EP1 or EP2. EP3 requires FinOps exemption.",
         estimatedCostPerMonth: {
           "EP1": "~$145 / month (1 core, 3.5 GB RAM)",
           "EP2": "~$290 / month (2 cores, 7 GB RAM)",
@@ -270,7 +270,7 @@ export class CachedPolicyRepository implements IPolicyRepository {
     return `${this.tenantId}::${tool}::${paramKey}`;
   }
 
-  private getCached<T>(key: string, requiredVersion: string = "2026.2"): T | null {
+  private getCached<T>(key: string, requiredVersion: string = "2026.3"): T | null {
     const entry = this.cache.get(key);
     if (!entry) {
       this.stats.misses++;
@@ -296,7 +296,7 @@ export class CachedPolicyRepository implements IPolicyRepository {
     return entry.data as T;
   }
 
-  private setCached<T>(key: string, data: T, policyVersion: string = "2026.2"): void {
+  private setCached<T>(key: string, data: T, policyVersion: string = "2026.3"): void {
     const now = Date.now();
     this.cache.set(key, {
       data,
