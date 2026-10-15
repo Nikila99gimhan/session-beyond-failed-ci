@@ -34,8 +34,16 @@ function ipv4Range(cidr: string): { first: number; last: number } {
 }
 
 export function inspectNetworkPreflight(template: Json, active: Json) {
+  if (active.parameters?.enablePrivateNetworking?.value === false) {
+    return {
+      mode: "offline-network-preflight", azureRequestMade: false,
+      scope: "IPv4 subnet containment in the compiled networkDeployment module only",
+      status: "NOT_APPLICABLE", code: "OFFLINE_PRIVATE_NETWORKING_DISABLED",
+      failuresCount: 0, operations: [],
+    };
+  }
   if (active.parameters?.enablePrivateNetworking?.value !== true) {
-    throw new Error("This demo preflight requires the active private networking path");
+    throw new Error("Missing or invalid private networking activation parameter");
   }
   const deployment = template.resources?.find((r: Json) =>
     r.type === "Microsoft.Resources/deployments" && r.name === "networkDeployment");
@@ -110,6 +118,7 @@ function main() {
         repository: process.env.GITHUB_REPOSITORY || "local",
         runId: process.env.GITHUB_RUN_ID || "local",
         runAttempt: process.env.GITHUB_RUN_ATTEMPT || "1",
+        headSha: process.env.SOURCE_HEAD_SHA || process.env.GITHUB_SHA || "local",
         testedSha: process.env.GITHUB_SHA || "local",
         templateFile,
         templateDigest: createHash("sha256").update(template).digest("hex"),
@@ -117,7 +126,7 @@ function main() {
         parameterDigest: createHash("sha256").update(parameters).digest("hex"),
       },
     };
-    exitCode = result.status === "PASSED" ? 0 : 1;
+    exitCode = ["PASSED", "NOT_APPLICABLE"].includes(result.status) ? 0 : 1;
   } catch (error) {
     result = {
       mode: "offline-network-preflight", azureRequestMade: false, status: "ERROR",
@@ -126,10 +135,27 @@ function main() {
     };
   }
   fs.writeFileSync(outputFile, JSON.stringify(result, null, 2) + "\n");
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const cell = (value: unknown) => String(value).replace(/[\r\n|<>]/g, " ");
+    const rows = (result.operations || []).flatMap((operation: Json) => operation.subnets.map((subnet: Json) =>
+      `| ${cell(subnet.name)} | ${cell(subnet.addressPrefix)} | ${cell(operation.addressPrefixes.join(", "))} | ${cell(subnet.status)} |`));
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+      "## Infrastructure preflight", "",
+      `**${cell(result.status)}** — offline IPv4 subnet containment; no Azure deployment attempted.`, "",
+      "| Subnet | Subnet range | VNet range | Result |",
+      "|---|---|---|---|", ...rows, "",
+      result.status === "NOT_APPLICABLE" ? "Private networking is disabled; no network containment validation was performed. Organization policy is evaluated separately." :
+      result.status === "ERROR" ? `Evidence error: ${cell(result.message)}` :
+        "A failed row means the subnet is outside the VNet address space. Correct the ranges independently of any SKU policy finding.",
+      "", "Detailed operations and input digests: `provisioning-evidence/provisioning-result.json`.", "",
+    ].join("\n") + "\n");
+  }
   if (exitCode) {
     console.error(`::error::${result.code}: nested network preflight did not pass. Operation details: provisioning-evidence/${outputFile}. Offline check; no Azure deployment was attempted.`);
   } else {
-    console.log("Offline network preflight passed (subnet containment only; no Azure request).");
+    console.log(result.status === "NOT_APPLICABLE"
+      ? "Offline network preflight not applicable: private networking disabled; policy is checked separately."
+      : "Offline network preflight passed (subnet containment only; no Azure request).");
   }
   process.exitCode = exitCode;
 }

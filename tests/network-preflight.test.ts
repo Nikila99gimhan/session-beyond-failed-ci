@@ -62,8 +62,9 @@ describe("Offline compiled Bicep network preflight", () => {
   });
 
   it("does not claim a validation result for an inactive network path", () => {
-    expect(() => inspectNetworkPreflight(compiled(), {
+    expect(inspectNetworkPreflight(compiled(), {
       parameters: { enablePrivateNetworking: { value: false } },
-    })).toThrow("active private networking path");
+    })).toMatchObject({ status: "NOT_APPLICABLE", operations: [], azureRequestMade: false });
+    expect(() => inspectNetworkPreflight(compiled(), { parameters: {} })).toThrow("activation parameter");
   });
 });

@@ -2,7 +2,11 @@
 
 ## 1. System Overview & Setup Requirements
 
-The Governed CI Investigation Agent is an analytical workflow triggered on failed runs of the `CI` pipeline (`workflow_run` event on `conclusion == 'failure'`). It correlates code changes against the **sample** versioned policy and ownership fixtures via Model Context Protocol (MCP) and GitHub Actions evidence artifacts, then proposes a human handoff issue or occurrence update. The deterministic check covers selected Bicep parameters; it is not a full Azure posture or deployment validation.
+The Governed CI Investigation Agent is an analytical workflow triggered on failed PR runs of the `CI` pipeline. CI starts only when a PR targeting `main` is opened, updated with commits, or reopened. Creating a branch or pushing commits without a PR does not run CI. A newer commit cancels an older in-progress CI run for that PR. There is no push or manual CI trigger.
+
+The investigator activates only after failed CI from a same-repository PR, subject to `DISABLE_CI_INVESTIGATOR`. Green, canceled, push, manual, and fork PR runs do not activate the agent. Any internal branch name is eligible; a special demo branch name is unnecessary. GitHub loads `workflow_run` automation from the default branch: these controls become active when the clean workflow change is merged into `main`.
+
+It correlates code changes against the **sample** versioned policy and ownership fixtures via Model Context Protocol (MCP) and source-run evidence artifacts, then proposes a human handoff issue or occurrence update. Independent infrastructure and policy findings appear in separate rows. CI job summaries show exact ranges or policy values; detailed evidence and audit remain available. The deterministic checks cover selected Bicep parameters and an offline IPv4 subnet containment contract, not full Azure posture or deployment validation. Source PR head and tested merge commit are distinct identities and must both be reported when different.
 
 ### Permissions & Security Boundary
 - **Deterministic CI Gate**: Application tests, Bicep compilation, and `npm run validate:policy` determine CI pass/fail. The policy validator exits `0` or `1` for the selected parameter fixture; the investigator cannot turn a failed gate green.

@@ -18,8 +18,8 @@ containment contract in the compiled Bicep template; it is not full ARM validati
 
 The policy job runs independently of Bicep validation so both findings survive
 in one failed CI run. All three existing required checks retain their names and
-failure semantics. The investigator and its permissions are unchanged. The new
-`baseline` branch uses an existing default-branch investigator allowlist entry.
+failure semantics. Automation is inherited from `main`; the PR diff contains
+only this guide and the two deliberate infrastructure/parameter changes.
 
 ## Acceptance evidence
 
@@ -33,9 +33,14 @@ failure semantics. The investigator and its permissions are unchanged. The new
    the offline result from an Azure provider response? Do not count issue
    creation alone as a successful diagnosis.
 
-Known test limits: the current investigator asks for exactly one classification
-and does not automatically download `provisioning-evidence`. It must retrieve
-that artifact through its existing read tools or clearly label a diff/log-based
-hypothesis. PR policy bundles also have a known merge-SHA versus head-SHA binding
-gap; the push run provides an unambiguous branch-head evidence path. Push and PR
-events can each produce a source CI run and an investigation occurrence.
+The original run created Issue #11 with only a verified policy diagnosis; it
+left the infrastructure cause unverified. That is a historical partial result.
+The clean workflow update in PR #12 now downloads both artifacts, separates
+independent findings, and distinguishes source PR head from tested merge SHA.
+Check the new live handoff before claiming that the mixed diagnosis passed.
+
+CI starts on opening/updating/reopening the PR to `main`, not a standalone
+branch push. Only failed same-repository PR CI can activate the investigator.
+The new source run therefore needs one investigation instead of separate push
+and PR investigations. The private networking and access guardrails remain
+enabled in this fixture; only the plan SKU violates the sample policy.

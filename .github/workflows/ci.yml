@@ -1,21 +1,16 @@
 name: CI
 
 on:
-  push:
-    branches: [main, baseline, policy-regression, codex/security-multi-violation-demo]
   pull_request:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      scenario:
-        description: 'Parameter scenario preset'
-        required: true
-        default: 'active'
-        type: choice
-        options:
-          - active
-          - compliant
-          - regression
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   application-tests:
@@ -59,6 +54,8 @@ jobs:
           echo "Bicep template compiled successfully without errors."
 
       - name: Offline Network Provisioning Preflight
+        env:
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: npx tsx scripts/validate-network-preflight.ts compiled-template.json infra/parameters/active.json provisioning-result.json
 
       - name: Upload Offline Provisioning Evidence
@@ -76,7 +73,7 @@ jobs:
   deployment-policy:
     name: Deployment Policy Check
     runs-on: ubuntu-latest
-    # Evaluate policy independently so an infrastructure failure cannot hide it.
+    # Independent checks preserve policy findings when infrastructure fails.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -90,20 +87,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Select Parameter Fixture
-        run: |
-          if [ "${{ inputs.scenario }}" = "compliant" ]; then
-            npm run scenario:compliant
-          elif [ "${{ inputs.scenario }}" = "regression" ]; then
-            npm run scenario:regression
-          fi
-
       - name: Evaluate Deployment Policy
         id: policy_eval
         run: npm run validate:policy
 
       - name: Package Investigation Context Bundle
         if: always()
+        env:
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: npx tsx scripts/package-evidence.ts infra/parameters/active.json policy-result.json investigation-context.json
 
       - name: Upload Policy Evidence Artifact
