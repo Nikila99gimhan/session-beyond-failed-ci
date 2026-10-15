@@ -20,6 +20,7 @@ export interface InvestigationContextBundle {
   runNumber: number;
   runAttempt: number;
   headSha: string;
+  sourceHeadSha: string;
   repository: string;
   service: string;
   environment: string;
@@ -104,6 +105,9 @@ export function generateInvestigationContext(
     runNumber,
     runAttempt,
     headSha,
+    // PR CI tests a synthetic merge commit; retain it and identify the PR head
+    // separately so the investigator does not confuse the two revisions.
+    sourceHeadSha: process.env.SOURCE_HEAD_SHA || headSha,
     repository,
     service: "azure-functions-service",
     environment: "production",

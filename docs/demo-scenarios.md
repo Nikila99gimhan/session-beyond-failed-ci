@@ -2,6 +2,8 @@
 
 This guide details the five experimental scenarios defined in the workshop plan, the exact commands to run each scenario, the expected CI results, and the investigator agent behavior.
 
+For live runs, create a branch from `main`, commit the chosen fixture, and open a PR to `main`. Subsequent commits on the open PR run CI again. Branch creation and pushes without a PR do not run CI. Investigation activates only after failed same-repository PR CI. See [PR flow and activation](pr-investigation-flow.md); the workflow changes must first be merged into `main`.
+
 ---
 
 ## Scenario Matrix
@@ -10,7 +12,7 @@ This guide details the five experimental scenarios defined in the workshop plan,
 |---|---|---|---|
 | **A: Compliant Baseline** | `infra/parameters/compliant.json` | All checks pass (Green) | Does not run (`conclusion == success`) |
 | **B: Policy Regression** | `infra/parameters/noncompliant.json` | `deployment-policy` fails with 4 violations | Runs; creates one handoff issue citing all four policy rules, owning team, and resolution options |
-| **C: Unrelated Failure** | Failing test in `tests/hello.test.ts` | `application-tests` fails; policy check skipped/not run | Runs; classifies as `CODE_OR_TEST_FAILURE`; avoids policy diagnosis |
+| **C: Unrelated Failure** | Failing test in `tests/hello.test.ts` | `application-tests` fails; independent policy check passes with compliant parameters | Runs; classifies as `CODE_OR_TEST_FAILURE`; avoids policy diagnosis |
 | **D: Missing Policy Context** | MCP server policy endpoint simulated outage | `deployment-policy` fails | Runs; notes missing policy context under "Missing Evidence & Unknowns"; does not hallucinate policy |
 | **E: Repeated Failure** | Repeat of Scenario B on same branch/PR | Same 4 violations | Updates existing issue or references prior run; avoids issue spam |
 
@@ -81,7 +83,7 @@ This guide details the five experimental scenarios defined in the workshop plan,
    ```
 3. **Observed Outcome**:
    - `application-tests` job fails.
-   - `deployment-policy` job is skipped or passes.
+   - `deployment-policy` runs independently and passes with compliant parameters.
 4. **Investigator Agent Triage**:
    - Classifies run as `CODE_OR_TEST_FAILURE`.
    - Identifies the assertion failure stack trace.
@@ -104,7 +106,7 @@ This guide details the five experimental scenarios defined in the workshop plan,
 ### Scenario E — Repeat Failure
 
 1. **Trigger Repeat Run**:
-   Re-run or re-push the same commit on the policy-regression branch.
+   Rerun failed CI on an open PR, or push a new commit to that PR. Reruns are distinct source attempts; a push without an open PR does not run CI.
 2. **Investigator Agent Triage**:
    - Checks existing open issues in the repository for matching run tags / commit SHA.
    - Consolidates or comments on existing thread rather than creating duplicate notifications.

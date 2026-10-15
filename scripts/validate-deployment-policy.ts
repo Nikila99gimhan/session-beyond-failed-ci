@@ -113,6 +113,17 @@ function main() {
   };
 
   fs.writeFileSync(resolvedOutput, JSON.stringify(result, null, 2), "utf-8");
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const cell = (value: unknown) => String(value).replace(/[\r\n|<>]/g, " ");
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+      "## Organization policy check", "",
+      `**${result.status}** — ${violations.length} violation(s), ${policy.rules.length} rules evaluated against sample policy v${cell(policy.policyVersion)}.`, "",
+      "| Rule | Parameter | Actual | Required | Severity |",
+      "|---|---|---|---|---|",
+      ...violations.map(v => `| ${cell(v.ruleId)} | ${cell(v.field)} | ${cell(v.actualValue)} | ${cell(Array.isArray(v.expectedValue) ? v.expectedValue.join(", ") : v.expectedValue)} | ${cell(v.severity)} |`),
+      "", "Policy findings are independent of infrastructure preflight failures. Evidence: `policy-result/policy-result.json`.", "",
+    ].join("\n") + "\n");
+  }
 
   if (violations.length > 0) {
     console.error(`\n======================================================`);

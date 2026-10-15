@@ -54,17 +54,22 @@ describe("Phase 2: Bounded Evidence Bundle (package-evidence)", () => {
     process.env.GITHUB_SHA = "45a44e54490c80fc9be39f29950cda4d20141f55";
     process.env.GITHUB_REPOSITORY = "Nikila99gimhan/session-beyond-failed-ci";
 
+    const previousSourceSha = process.env.SOURCE_HEAD_SHA;
+    process.env.SOURCE_HEAD_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const bundle = generateInvestigationContext(
       "infra/parameters/noncompliant.json",
       samplePolicyResult,
       outputFile
     );
+    if (previousSourceSha === undefined) delete process.env.SOURCE_HEAD_SHA;
+    else process.env.SOURCE_HEAD_SHA = previousSourceSha;
 
     expect(bundle.schemaVersion).toBe("1.0.0");
     expect(bundle.runId).toBe(36270836892);
     expect(bundle.runNumber).toBe(13);
     expect(bundle.runAttempt).toBe(1);
     expect(bundle.headSha).toBe("45a44e54490c80fc9be39f29950cda4d20141f55");
+    expect(bundle.sourceHeadSha).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     expect(bundle.repository).toBe("Nikila99gimhan/session-beyond-failed-ci");
     expect(bundle.status).toBe("POLICY_REGRESSION");
     expect(bundle.violationsCount).toBe(2);
