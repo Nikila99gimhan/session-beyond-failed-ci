@@ -72,6 +72,69 @@ safe-outputs:
 
 timeout-minutes: 10
 max-ai-credits: 120
+
+# These deterministic jobs have the only PR/check write permissions. They run
+# trusted code at the workflow revision, never code from the triggering PR.
+jobs:
+  investigation_check:
+    name: Start PR investigation check
+    needs: [pre_activation]
+    if: needs.pre_activation.outputs.activated == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      checks: write
+    outputs:
+      check_id: ${{ steps.feedback.outputs.check_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Attach running check to the source PR commit
+        id: feedback
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const { start } = require('./scripts/publish-investigation-feedback.cjs');
+            await start({ github, context, core });
+  pr_feedback:
+    name: Publish investigation link to PR
+    needs: [investigation_check, agent, detection, safe_outputs]
+    if: always() && needs.investigation_check.outputs.check_id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: write
+      checks: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Link the verified issue and complete the PR check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          CHECK_ID: ${{ needs.investigation_check.outputs.check_id }}
+          CREATED_ISSUE: ${{ needs.safe_outputs.outputs.created_issue_number }}
+          AGENT_RESULT: ${{ needs.agent.result }}
+          DETECTION_RESULT: ${{ needs.detection.result }}
+          DETECTION_CONCLUSION: ${{ needs.detection.outputs.detection_conclusion }}
+          WRITER_RESULT: ${{ needs.safe_outputs.result }}
+        with:
+          script: |
+            const { finish } = require('./scripts/publish-investigation-feedback.cjs');
+            await finish({ github, context, core, delivery: {
+              checkId: process.env.CHECK_ID, createdIssue: process.env.CREATED_ISSUE,
+              agent: process.env.AGENT_RESULT, detection: process.env.DETECTION_RESULT,
+              detectionConclusion: process.env.DETECTION_CONCLUSION, writer: process.env.WRITER_RESULT
+            }});
 ---
 
 # Governed CI Investigation Agent
@@ -138,6 +201,7 @@ Classify **each independent finding** using one category; a run can have several
    - **Case B: Distinct Occurrence (Rerun or Multi-Account)**: If the canonical issue exists but does NOT contain this `OCCURRENCE_KEY`, invoke `add-comment` to record the new occurrence in a compact table row:
      `| <source run ID> | attempt <source run_attempt from API> | <source head SHA> | <source run URL> |`
      Include the same findings table and evidence status as a new issue; an occurrence row alone must not conceal another independent failure.
+     Embed the exact `OCCURRENCE_KEY` and `ROOT_CAUSE_FINGERPRINT` markers in this comment as well. The separate PR publisher verifies that bot-authored occurrence before linking the existing issue.
    - **Case C: New Root Cause**: If no open issue exists for this root-cause fingerprint, create one issue using `create-issue`. For policy-only incidents retain the stable title `<service> <sorted rule IDs> (Policy v<version>)`. For mixed incidents use a short title naming both causes, such as `<service>: subnet ranges + SKU policy (Policy v<version>)`; keep precise sorted identifiers in the fingerprint. The writer adds `[CI Failure] `. Embed both markers at the bottom of the description:
      `<!-- ROOT_CAUSE_FINGERPRINT: ... -->`
      `<!-- OCCURRENCE_KEY: ... -->`
