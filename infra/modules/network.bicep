@@ -34,7 +34,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
       {
         name: 'snet-private-endpoints'
         properties: {
-          addressPrefix: '10.0.2.0/24'
+          addressPrefix: '10.1.2.0/24'
           privateEndpointNetworkPolicies: 'Disabled'
         }
       }
