@@ -9,7 +9,7 @@
       "value": "EP1"
     },
     "publicNetworkAccess": {
-      "value": "Disabled"
+      "value": "Enabled"
     },
     "enableAuthentication": {
       "value": true

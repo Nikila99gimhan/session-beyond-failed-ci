@@ -20,7 +20,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
       {
         name: 'snet-functions-outbound'
         properties: {
-          addressPrefix: '10.0.1.0/24'
+          addressPrefix: '10.3.1.0/24'
           delegations: [
             {
               name: 'delegation-serverFarms'
