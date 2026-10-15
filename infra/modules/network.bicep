@@ -5,7 +5,7 @@ param location string
 param vnetName string
 
 @description('VNet address space prefix')
-param addressPrefix string = '10.0.0.0/16'
+param addressPrefix string = '10.0.0.0/24'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
   name: vnetName
