@@ -1,0 +1,27 @@
+{
+  "provenance": {
+    "runtime": "github/gh-aw v0.89.21",
+    "source": "https://github.com/github/gh-aw/blob/v0.89.21/actions/setup/js/sanitize_content_core.cjs",
+    "sanitizerSha256": "de4290edbae54ef0e4426b71426d34f925c75d616ae95f5dc1b3f4b537de1bff",
+    "note": "Captured by calling official sanitizeContent twice (ingestion then writer). Static compatibility fixture; not a live Actions run."
+  },
+  "marker": "OCCURRENCE_KEY: demo/repo::100::1",
+  "legacy": {
+    "input": "<!-- OCCURRENCE_KEY: demo/repo::100::1 -->\n\n## Finding\n\nVerified demo finding.",
+    "sanitized": "## Finding\n\nVerified demo finding."
+  },
+  "cases": [
+    {
+      "workflow": "ci-investigator",
+      "template": "OCCURRENCE_KEY: <repo>::<run_id>::<run_attempt>\nROOT_CAUSE_FINGERPRINT: <repo>::<service>::<env>::<sorted_rules>::<policy_version>",
+      "input": "## Finding\n\nVerified demo finding.\n\n<details>\n<summary>Source and audit</summary>\n\n```text\nOCCURRENCE_KEY: demo/repo::100::1\nROOT_CAUSE_FINGERPRINT: demo/repo::azure-functions-service::production::POL-AZ-NET-001::2026.2\n```\n\n</details>",
+      "sanitized": "## Finding\n\nVerified demo finding.\n\n<details>\n<summary>Source and audit</summary>\n\n```text\nOCCURRENCE_KEY: demo/repo::100::1\nROOT_CAUSE_FINGERPRINT: demo/repo::azure-functions-service::production::POL-AZ-NET-001::2026.2\n```\n\n</details>"
+    },
+    {
+      "workflow": "shared-module-investigator",
+      "template": "OCCURRENCE_KEY: <repository>::<source CI run ID>::<source attempt>\nROOT_CAUSE_FINGERPRINT: <repository>::shared-module::infra/modules/hostingPlan.bicep::SAMPLE-ZONE-001::<sorted affected consumer IDs>::<registry version>",
+      "input": "## Finding\n\nVerified demo finding.\n\n<details>\n<summary>Source and audit</summary>\n\n```text\nOCCURRENCE_KEY: demo/repo::100::1\nROOT_CAUSE_FINGERPRINT: demo/repo::shared-module::infra/modules/hostingPlan.bicep::SAMPLE-ZONE-001::sample-inherited-zone::sample-2026.1\n```\n\n</details>",
+      "sanitized": "## Finding\n\nVerified demo finding.\n\n<details>\n<summary>Source and audit</summary>\n\n```text\nOCCURRENCE_KEY: demo/repo::100::1\nROOT_CAUSE_FINGERPRINT: demo/repo::shared-module::infra/modules/hostingPlan.bicep::SAMPLE-ZONE-001::sample-inherited-zone::sample-2026.1\n```\n\n</details>"
+    }
+  ]
+}

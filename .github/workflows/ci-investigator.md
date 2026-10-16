@@ -204,10 +204,15 @@ Classify **each independent finding** using one category; a run can have several
    - **Case B: Distinct Occurrence (Rerun or Multi-Account)**: If the canonical issue exists but does NOT contain this `OCCURRENCE_KEY`, invoke `add-comment` to record the new occurrence in a compact table row:
      `| <source run ID> | attempt <source run_attempt from API> | <source head SHA> | <source run URL> |`
      Include the same findings table and evidence status as a new issue; an occurrence row alone must not conceal another independent failure.
-     Embed the exact `OCCURRENCE_KEY` and `ROOT_CAUSE_FINGERPRINT` markers in this comment as well. The separate PR publisher verifies that bot-authored occurrence before linking the existing issue.
-   - **Case C: New Root Cause**: If no open issue exists for this root-cause fingerprint, create one issue using `create-issue`. For policy-only incidents retain the stable title `<service> <sorted rule IDs> (Policy v<version>)`. For mixed incidents use a short title naming both causes, such as `<service>: subnet ranges + SKU policy (Policy v<version>)`; keep precise sorted identifiers in the fingerprint. The writer adds `[CI Failure] `. Embed both markers at the bottom of the description:
-     `<!-- ROOT_CAUSE_FINGERPRINT: ... -->`
-     `<!-- OCCURRENCE_KEY: ... -->`
+     Include both exact markers using the audit block below. The separate PR publisher verifies that bot-authored occurrence before linking the existing issue.
+   - **Case C: New Root Cause**: If no open issue exists for this root-cause fingerprint, create one issue using `create-issue`. For policy-only incidents retain the stable title `<service> <sorted rule IDs> (Policy v<version>)`. For mixed incidents use a short title naming both causes, such as `<service>: subnet ranges + SKU policy (Policy v<version>)`; keep precise sorted identifiers in the fingerprint. The writer adds `[CI Failure] `.
+
+Every new issue and occurrence comment must include both exact markers on separate lines in a fenced `text` block inside Source and audit. HTML comments are removed by safe-output sanitization and cannot carry these fields. Keep the block even when updating an existing issue:
+
+```text
+OCCURRENCE_KEY: <repo>::<run_id>::<run_attempt>
+ROOT_CAUSE_FINGERPRINT: <repo>::<service>::<env>::<sorted_rules>::<policy_version>
+```
 
 For a new issue, use `create-issue`. For a distinct occurrence, put the same compact findings and uncertainty fields in the comment. Lead with the failure count and plain-language causes. Keep source identity and technical audit metadata in a collapsible section. Do not call a report complete when a failed job is uninvestigated. Use this readable format (one row per independent cause, not one row per affected subnet):
 

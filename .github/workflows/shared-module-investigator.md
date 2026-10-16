@@ -268,5 +268,12 @@ State that baseline CI passed and the separate assessment found one consumer req
 - Occurrence marker: `OCCURRENCE_KEY: <repository>::<source CI run ID>::<source attempt>`.
 - Fingerprint: `ROOT_CAUSE_FINGERPRINT: <repository>::shared-module::infra/modules/hostingPlan.bicep::SAMPLE-ZONE-001::<sorted affected consumer IDs>::<registry version>`.
 - Search only the triggering repository for the exact fingerprint. Only use an issue with `[Module Review] ` prefix and `shared-module-review` label. Fail closed on incomplete/ambiguous search.
-- An exact bot-authored occurrence already recorded means noop. A distinct occurrence updates its canonical issue with the full finding and new occurrence marker. Otherwise create one issue titled `hosting plan default changes inherited redundancy` (the writer adds its prefix).
-- Embed both exact markers as HTML comments in every delivered issue/update. One consolidated issue per assessment, not one issue per consumer. The trusted publisher links the verified issue to the exact PR source commit.
+- An exact bot-authored occurrence already recorded means noop. A distinct occurrence updates its canonical issue with the full finding and new occurrence marker. Otherwise create one issue titled `hosting plan default disables inherited zone redundancy` (the writer adds its prefix). This stable title replaces the earlier marker-free report title; do not reuse a legacy report without its exact fingerprint.
+- Put both exact markers on separate lines in a fenced `text` block inside Source and audit in every delivered issue/update. HTML comments are removed by safe-output sanitization and cannot carry these fields. Keep the block even when updating an existing issue:
+
+  ```text
+  OCCURRENCE_KEY: <repository>::<source CI run ID>::<source attempt>
+  ROOT_CAUSE_FINGERPRINT: <repository>::shared-module::infra/modules/hostingPlan.bicep::SAMPLE-ZONE-001::<sorted affected consumer IDs>::<registry version>
+  ```
+
+- One consolidated issue per assessment, not one issue per consumer. The trusted publisher links the verified bot-authored occurrence to the exact PR source commit; a title or source URL alone is insufficient.
