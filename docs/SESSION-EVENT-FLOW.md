@@ -27,7 +27,7 @@ The clean implementation is available in [PR #19](https://github.com/Nikila99gim
 | --- | --- | --- | --- |
 | 00:00–03:00 | 1–2 | Start with an ordinary failed PR and the familiar habit of copying logs into chat. | The missing work is collecting a supported explanation and next steps. |
 | 03:00–06:00 | 3–5 | Show normal CI YAML, investigator Markdown, then generated workflow YAML. | The source instructions, executable workflow and runtime evidence are different artifacts. |
-| 06:00–14:00 | 6–8 | Follow the prepared Demo 1 source diff → three CI checks → investigation check → two findings → issue and PR comment. | A compiler defect and a policy violation are independent; both repairs are visible. |
+| 06:00–14:00 | 6–8 | Follow the prepared Demo 1 source diff → three required CI checks → investigation check → two findings → issue and PR comment. | A compiler defect and a policy violation are independent; both repairs are visible. |
 | 14:00–19:00 | 9–11 | Show evidence identity, one relevant MCP exchange and controlled delivery. | Evidence and permissions give the investigation its boundaries. |
 | 19:00–26:00 | 12–14 | Follow Demo 2 default change → green root CI → selected assessment → two consumer results → scoped handoff. | Green checks describe what they evaluated; the extra question needs extra evidence. |
 | 26:00–30:00 | 15–16 | Explain selection, separate budgets, measurements and bounded adoption. | Spend inference on unresolved contextual questions; keep enforcement deterministic. |
