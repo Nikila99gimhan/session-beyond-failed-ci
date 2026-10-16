@@ -1,0 +1,86 @@
+name: Shared Module Safety
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-module-safety-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  shared-module-gate:
+    name: Shared Module Safety Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Run the assessor and package scripts from the exact trusted base.
+      # Candidate files are read as Git objects, never executed as automation.
+      - name: Check out trusted assessment code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: automation
+          persist-credentials: false
+      - name: Check out candidate source for module bytes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      - name: Select and snapshot the registered module
+        id: scope
+        env:
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha }}
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C automation show "$BASELINE_SHA:infra/modules/hostingPlan.bicep" > "$RUNNER_TEMP/gate-baseline-hostingPlan.bicep"
+          git -C candidate show "$SOURCE_HEAD_SHA:infra/modules/hostingPlan.bicep" > "$RUNNER_TEMP/gate-candidate-hostingPlan.bicep"
+          if cmp -s "$RUNNER_TEMP/gate-baseline-hostingPlan.bicep" "$RUNNER_TEMP/gate-candidate-hostingPlan.bicep"; then
+            echo "selected=false" >> "$GITHUB_OUTPUT"
+            echo "No registered hosting module change. No consumer compilation or AI investigation is needed by this gate." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "selected=true" >> "$GITHUB_OUTPUT"
+            echo "Registered module changed. This required check blocks merging unless the scoped consumer requirements pass. The separate investigation explains any finding." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Set up Node.js for trusted assessment
+        if: steps.scope.outputs.selected == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: automation/package-lock.json
+      - name: Install trusted assessment dependencies
+        if: steps.scope.outputs.selected == 'true'
+        working-directory: automation
+        run: npm ci
+      - name: Enforce registered consumer requirements
+        if: steps.scope.outputs.selected == 'true'
+        working-directory: automation
+        env:
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha }}
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # Preserve the assessor's exit status: 0 passes, 1 blocks a verified
+        # requirement finding, and 2 blocks unsupported/incomplete evidence.
+        run: |
+          node --import tsx scripts/assess-shared-module.ts \
+            --baseline-module "$RUNNER_TEMP/gate-baseline-hostingPlan.bicep" \
+            --candidate-module "$RUNNER_TEMP/gate-candidate-hostingPlan.bicep" \
+            --output "$RUNNER_TEMP/gate-shared-module-assessment.json" \
+            --templates-dir "$RUNNER_TEMP/gate-consumer-templates"
+      - name: Upload gate assessment evidence
+        if: always() && steps.scope.outputs.selected == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: shared-module-gate-evidence
+          path: |
+            ${{ runner.temp }}/gate-shared-module-assessment.json
+            ${{ runner.temp }}/gate-consumer-templates/
+          if-no-files-found: error
+          retention-days: 7
