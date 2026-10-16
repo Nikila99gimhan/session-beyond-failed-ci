@@ -5,6 +5,7 @@
   "main": "dist/src/functions/hello.js",
   "type": "module",
   "scripts": {
+    "verify:session-demos": "npm run build && node scripts/verify-session-demos.mjs",
     "build": "tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

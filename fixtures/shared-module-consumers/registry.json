@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "registryVersion": "sample-2026.1",
+  "modulePath": "infra/modules/hostingPlan.bicep",
+  "scope": "Two registered sample consumers; compiled configuration only, not deployed Azure resources or organization-wide discovery.",
+  "consumers": [
+    {
+      "id": "sample-explicit-zone",
+      "sourceRef": "fixture:shared-module-consumers/explicit-zone.bicep@sample-2026.1",
+      "wrapper": "explicit-zone.bicep",
+      "wrapperDigest": "693f761cb07a00b279e5f3c729ddb2e221abd67ca32d0b653a8b86954a683bb6",
+      "service": "sample-orders-service",
+      "environment": "production",
+      "requirement": { "id": "SAMPLE-ZONE-001", "zoneRedundant": true }
+    },
+    {
+      "id": "sample-inherited-zone",
+      "sourceRef": "fixture:shared-module-consumers/inherited-zone.bicep@sample-2026.1",
+      "wrapper": "inherited-zone.bicep",
+      "wrapperDigest": "a07ce1a44a48b4e38421ea0f9278f29b4102522f4a6f1583bcf2e57d649f30ed",
+      "service": "sample-payments-service",
+      "environment": "production",
+      "requirement": { "id": "SAMPLE-ZONE-001", "zoneRedundant": true }
+    }
+  ]
+}
