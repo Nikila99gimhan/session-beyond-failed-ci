@@ -7,6 +7,7 @@ Use with `SESSION-EVENT-FLOW.md` and `SESSION-SPEAKER-NOTES.md`.
 
 - Open the final deck and six bookmark groups: source PRs, CI, investigations, issue/PR delivery, evidence/MCP, module consumers.
 - Verify both PR heads match the prepared evidence ledger.
+- Before preparing new scenarios, manually merge clean PR #19 and verify its default-branch workflow installation. Its clean CI is green; the two new live investigations remain pending.
 - Use completed runs. Keep same-run screenshots/artifacts available offline.
 - Keep the intentional changes on separate feature branches; leave required CI protection active.
 - Check the slide notes, browser zoom and time display. No dependency downloads or fresh paid runs onstage.
@@ -24,7 +25,7 @@ Use with `SESSION-EVENT-FLOW.md` and `SESSION-SPEAKER-NOTES.md`.
 
 - **6 · Diff:** renamed Bicep output; unchanged caller; separate public-access change.
 - **7 · Checks:** application **unit tests** pass; Bicep **compilation** fails; independent policy fails.
-- Point to the actual compiler diagnostic. Do not call this an Azure provisioning failure.
+- Point to compiler diagnostic **BCP053**. Do not call this an Azure provisioning failure.
 - If compilation failed, offline preflight did not prove anything about the template; identify it as skipped.
 - **8 · Findings:** two causes, two repairs.
   - Restore/update the output contract consistently.
@@ -50,6 +51,7 @@ Use with `SESSION-EVENT-FLOW.md` and `SESSION-SPEAKER-NOTES.md`.
 - **13 · Comparison:** consumer A explicit `true` stays true; consumer B omitted input becomes false.
 - Point to baseline/candidate compiled evidence and sample requirement `SAMPLE-ZONE-001`.
 - **14 · Selection:** sensitive-module route runs before model inference. Read exact check semantics from the verified run.
+- Exact replay recovers existing delivery without AI. Invalid selected evidence produces a visible manual-review check without AI.
 - Show `Shared Module Review` and its linked `[Module Review]` handoff. Success means delivery, not approval; it is informational. Baseline CI remains green.
 - **Say:** “Two registered sample consumers evaluated.” No enterprise-wide discovery or live-cloud-impact claim.
 - Supported edit: literal default only; unsupported changes become unknown/error.
@@ -57,7 +59,8 @@ Use with `SESSION-EVENT-FLOW.md` and `SESSION-SPEAKER-NOTES.md`.
 
 ## 26:00–31:00 — cost, adoption, close
 
-- **15 · Cost:** deterministic routing, bounded evidence, relevant context, replay handling.
+- **15 · Cost:** shared-module routing before inference, bounded evidence, relevant context, replay handling.
+- Failure investigations still start on eligible failures; prompt-level replay handling does not guarantee zero inference cost.
 - Known rule + known remedy often needs a deterministic message, not an agent.
 - Measure agent and detection credits separately. Agent's 120-AIC setting is not a total-workflow cap.
 - No percentage-saving or ROI claim without measurements.
@@ -84,3 +87,10 @@ Use with `SESSION-EVENT-FLOW.md` and `SESSION-SPEAKER-NOTES.md`.
 - **Why is consumer CI green with a finding?** The assessment records a review finding. The separate review is informational; the three required enforcement gates keep their existing semantics.
 - **Does read-only prevent all harm?** It limits mutation. Data access and output destinations still require controls.
 - **Can it fix the code?** This demo proposes repairs; a developer reviews and commits them.
+
+## Rehearsal evidence
+
+- `npm run verify:session-demos` checks twelve isolated cases with real Bicep compilation.
+- Release QA: 139 tests, typecheck/build, both strict workflow compilations passed.
+- Clean PR #19 CI run: `38909060883`, four jobs passed.
+- These results do not replace completed live runs of the two revised scenarios.

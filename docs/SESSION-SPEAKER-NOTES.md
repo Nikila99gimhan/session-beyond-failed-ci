@@ -12,6 +12,8 @@ Each section contains exact proposed slide copy, spoken notes and technical back
 
 The revised scenarios require release verification. Until the event-flow evidence ledger contains inspected run IDs and findings, describe their live readiness as pending. Source code and a passing local test are different evidence from a delivered live investigation. The final deck must match the released behavior.
 
+Local QA verified twelve isolated cases using Bicep 0.43.8. The removed-output fixture emitted BCP053 alongside independent `POL-AZ-NET-001`; separate repairs proved the causes independent. The shared-default fixture retained passing root compilation/policy while one of two compiled registered consumers failed its sample requirement. The unchanged comparison passed both consumers. The 139-test suite passed on the release and both mutant copies, and typecheck/build plus both strict workflow compilations passed. See `docs/session-evidence/local-verification.json`. Clean implementation PR #19 passed four CI jobs in run `38909060883`; it still needs the owner's merge before the two new live investigation paths can be rehearsed.
+
 ## Session thesis
 
 > CI decides what passed. A selected investigation explains supported causes, relevant context and next steps. Controlled delivery makes that result reviewable.
@@ -24,12 +26,14 @@ The first example joins two independent failures. The second asks a question ord
 
 ### Slide copy
 
-**When CI Fails**  
-Governed investigation with GitHub Copilot and MCP
+**When CI Fails**
 
-Keep CI deterministic. Investigate selected questions.
+Governed investigation
+with GitHub Copilot and MCP
 
-Nikila Fernando · DevDays Colombo
+Nikila Fernando
+Microsoft MVP for Azure and Developer Technology
+Senior Platform Engineer - Sysco Labs
 
 ### Say
 
@@ -39,20 +43,24 @@ Nikila Fernando · DevDays Colombo
 
 Start directly. Explain the problem before listing products. Keep the supplied event template and restrained white MVP mark; the logo is speaker branding, not evidence of product endorsement.
 
-## Slide 2 — A red check is the start of the work
+## Slide 2 — After a failed check
 
 **Time:** 00:40–03:00
 
 ### Slide copy
 
-**A red check is the start of the work**
+**After a failed check**
 
-- Read the failed jobs and the changed code
-- Find the applicable context
-- Decide which causes need which repairs
-- Leave a handoff another engineer can verify
+Failed jobs
+Changed code
+Evaluated inputs
+Applicable context
 
-Many of us start by copying log fragments into chat.
+What changed?
+What should I fix?
+How do I verify it?
+
+Log fragments often enter another chat.
 
 ### Say
 
@@ -66,20 +74,20 @@ Many of us start by copying log fragments into chat.
 
 Do not assert a measured number of daily failed pipelines or saved engineering hours. This repository establishes a mechanism, not organization-wide return on investment. Compare the agent with a good deterministic report and the team's existing troubleshooting practice.
 
-## Slide 3 — Two questions, one investigation pattern
+## Slide 3 — The two demo scenarios
 
 **Time:** 03:00–03:40
 
 ### Slide copy
 
-**Two questions, one investigation pattern**
+**The two demo scenarios**
 
-| Red CI | Green baseline CI |
-| --- | --- |
-| Bicep compilation + independent policy failure | Shared module default changes |
-| Explain both causes and both repairs | Evaluate registered sample consumers |
+| Scenario | Observed result | Investigation question |
+| --- | --- | --- |
+| Compiler + policy | Tests pass, two checks fail | Which repairs address both causes? |
+| Shared default | Root CI passes | Which registered callers inherit the change? |
 
-Evidence → relevant context → governed handoff
+One repository. No Azure deployment.
 
 ### Say
 
@@ -87,20 +95,22 @@ Evidence → relevant context → governed handoff
 
 “I will use prepared completed runs, so we spend our time understanding the result rather than waiting for an inference queue.”
 
-## Slide 4 — Keep the gate; add a bounded investigation
+## Slide 4 — CI and investigation
 
 **Time:** 03:40–04:40
 
 ### Slide copy
 
-**Keep the gate; add a bounded investigation**
+**CI and investigation**
 
-PR → deterministic CI → selected investigation → controlled handoff
+Pull request
+Deterministic CI
+Selection
+Investigation
+MCP context
+Controlled handoff
 
-- CI owns pass/fail
-- Read-only agent gathers and explains
-- MCP returns selected context
-- Separate writer publishes permitted output
+CI owns pass/fail. The agent proposes an explanation.
 
 ### Say
 
@@ -112,22 +122,23 @@ PR → deterministic CI → selected investigation → controlled handoff
 
 The source CI job evaluates candidate code in an unprivileged PR context. Follow-up automation runs trusted code from its workflow revision and treats candidate logs and artifacts as untrusted data. Review effective token scopes as well as YAML permissions; a separate broad PAT would not be restricted by the job's permission block.
 
-## Slide 5 — Markdown is the task; YAML runs it
+## Slide 5 — Workflow source and execution
 
 **Time:** 04:40–06:00
 
 ### Slide copy
 
-**Markdown is the task; YAML runs it**
+**Workflow source and execution**
 
 | Artifact | Responsibility |
 | --- | --- |
-| `ci.yml` | Deterministic checks and evidence |
-| Investigator `.md` | Trigger, instructions, tools and limits |
-| Generated `.lock.yml` | Executable GitHub Actions workflow |
-| Run logs and artifacts | What actually happened |
+| ci.yml | Checks and evidence |
+| Investigator .md | Task, tools and limits |
+| Generated .lock.yml | Executable Actions workflow |
+| Run logs and artifacts | Observed execution |
 
-Compile with the project's pinned gh-aw version.
+gh aw compile
+Pinned compiler v0.89.21
 
 ### Say
 
@@ -141,20 +152,26 @@ Compile with the project's pinned gh-aw version.
 
 Use `gh aw compile ci-investigator --strict` and `gh aw compile shared-module-investigator --strict` with the repository's pinned compiler. Do not upgrade the toolchain during the event. Workflow source and compiled output must move together in the release. The familiar `pre_activation`, `activation`, `agent`, `detection`, `safe_outputs` and `conclusion` stages can be shown briefly; their existence alone does not establish correctness.
 
-## Slide 6 — Demo 1: a normal change with two mistakes
+## Slide 6 — Compiler and policy failures
 
 **Time:** 06:00–07:30
 
 ### Slide copy
 
-**Demo 1: a normal change with two mistakes**
+**Compiler and policy failures**
 
-1. Module output renamed; caller still uses the old name
-2. Production public network access enabled
+Local verified scenario
 
-Question: can the handoff explain both causes and both repairs?
+Module export renamed
+outboundSubnetId becomes functionSubnetId
 
-No Azure deployment. Real Bicep compilation.
+Caller still references
+network!.outputs.outboundSubnetId
+
+Separate production input
+publicNetworkAccess: Enabled
+
+Real Bicep compilation. No Azure deployment.
 
 ### Say
 
@@ -168,23 +185,23 @@ No Azure deployment. Real Bicep compilation.
 
 ### Technical backup
 
-Start from compliant clean source, not a branch with an older subnet defect. Keep `infra/main.bicep` unchanged for the broken-caller scenario. The compiler diagnostic code must be taken from the verified run; do not assume BCP052 versus BCP053. The public-access rule is `POL-AZ-NET-001`, not a universal claim that every public Azure endpoint is prohibited.
+Start from compliant clean source, not a branch with an older subnet defect. Keep `infra/main.bicep` unchanged for the broken-caller scenario. Bicep 0.43.8 emitted BCP053 for the verified removed-output fixture. The report should cite the actual source diagnostic. The public-access rule is `POL-AZ-NET-001`, not a universal claim that every public Azure endpoint is prohibited.
 
-## Slide 7 — The checks tell different stories
+## Slide 7 — Independent CI results
 
 **Time:** 07:30–10:00
 
 ### Slide copy
 
-**The checks tell different stories**
+**Independent CI results**
 
-| Check | Result | What it establishes |
+| Check | Result | Evidence |
 | --- | --- | --- |
-| Application Tests | Pass | Application unit tests passed |
-| Bicep Syntax & Template Validation | Fail | Caller references a missing output |
-| Deployment Policy Check | Fail | Sample production ingress rule violated |
+| Application unit tests | PASS | 139 tests pass on the fixture |
+| Bicep compilation | FAIL | BCP053: missing module output |
+| Deployment policy | FAIL | POL-AZ-NET-001: public access enabled |
 
-Compilation failed → offline preflight cannot evaluate the template.
+Failed compilation skips the offline network preflight.
 
 ### Say
 
@@ -200,20 +217,21 @@ Compilation failed → offline preflight cannot evaluate the template.
 
 The configured CI trigger is PR opened/synchronize/reopened targeting `main`. A branch push without a PR does not run this CI. The investigator's workflow-run record can have an automation head distinct from the candidate head; use the source identity in its verified context. A PR CI run may test a generated merge SHA, so report both source head and tested SHA.
 
-## Slide 8 — Two findings; two concrete repairs
+## Slide 8 — Findings and repairs
 
 **Time:** 10:00–14:00
 
 ### Slide copy
 
-**Two findings; two concrete repairs**
+**Findings and repairs**
 
-| Cause | Repair | Verify |
+| Finding | Code repair | Verification |
 | --- | --- | --- |
-| Module/caller output contract diverged | Restore the output or update every caller consistently | Bicep build |
-| Production public access enabled | Restore `Disabled` for the recorded requirement | Policy check |
+| Output contract | Restore the export or update callers consistently | Bicep build |
+| Production ingress | Restore publicNetworkAccess to Disabled | Policy check |
 
-Delivered report ≠ passing CI
+The report leads with repairs.
+Delivery success leaves the required CI checks failed.
 
 ### Say
 
@@ -233,21 +251,21 @@ Delivered report ≠ passing CI
 
 Local repair verification uses `npm test`, `az bicep build --file infra/main.bicep --outfile compiled-template.json`, then `npm run validate:policy`. Once compilation succeeds, run the workflow's offline preflight as well. A negative test can repair one dimension at a time to prove independence. The incident identity should include both the compiler cause and the policy rule; grouping by policy rule alone can collapse different mixed failures.
 
-## Slide 9 — Bind the answer to the evidence
+## Slide 9 — Evidence identity
 
 **Time:** 14:00–15:40
 
 ### Slide copy
 
-**Bind the answer to the evidence**
+**Evidence identity**
 
-- Repository · source run · attempt
-- Source PR head · tested merge revision
-- Exact evaluated inputs · artifact digests
-- Baseline/candidate identities for assessments
-- Missing or stale evidence stays explicit
+Repository and source CI
+Run ID and attempt
+PR head and tested merge revision
+Exact inputs and artifact digests
 
-Matching bytes do not, by themselves, prove trusted origin.
+Assessments also bind baseline and candidate modules.
+Missing or stale evidence stays explicit.
 
 ### Say
 
@@ -263,23 +281,26 @@ Matching bytes do not, by themselves, prove trusted origin.
 
 Digest checks and schema validation are necessary consistency controls but do not prove a causal explanation. Bound downloads, schemas and parsers; fail closed or label missing evidence. A fallback to source logs must retain provenance and explicitly limit the claim. The PR publisher rechecks the latest source head to avoid writing a stale result over a newer one.
 
-## Slide 10 — MCP supplies selected facts
+## Slide 10 — MCP context
 
 **Time:** 15:40–17:20
 
 ### Slide copy
 
-**MCP supplies selected facts**
+**MCP context**
 
-Request: service, environment, relevant rule, policy version
+get_investigation_context
 
-Response: requirement, ownership, freshness, evidence
+service: azure-functions-service
+environment: production
+ruleIds: [POL-AZ-NET-001]
+policyVersion: 2026.2
 
-- Read-only interface to bounded context
-- Local versioned sample catalog in this demo
-- Missing context is uncertainty
+Applicable requirement
+Ownership and freshness
+Versioned evidence
 
-MCP is an interface, not policy approval or enterprise discovery.
+Local sample catalog. Missing context remains uncertainty.
 
 ### Say
 
@@ -293,22 +314,24 @@ MCP is an interface, not policy approval or enterprise discovery.
 
 ### Technical backup
 
-The consolidated policy tool reduces predictable round trips. In-process caching can reuse reads during its real lifetime; fresh runners do not share a permanent warm cache. A supplied scope allowlist is not caller-bound authorization. The shared-consumer assessment uses source evidence directly and reuses the existing context tool only when ownership is useful; it needs no new MCP server or tool. For a tiny static catalog a direct function or API could be simpler; MCP is useful when an explicit tool contract is part of the integration.
+The consolidated policy tool reduces predictable round trips. In-process caching can reuse reads during its real lifetime; fresh runners do not share a permanent warm cache. A supplied scope allowlist is not caller-bound authorization. The shared-consumer finding uses compiled evidence directly; optional `get_service_ownership` provides only the root service's owner. Sample consumer owners remain unknown unless their evidence supports them. The shared review does not fetch unrelated deployment rules and needs no new MCP server or tool. For a tiny static catalog a direct function or API could be simpler; MCP is useful when an explicit tool contract is part of the integration.
 
-## Slide 11 — Publish through a controlled path
+## Slide 11 — Controlled delivery
 
 **Time:** 17:20–19:00
 
 ### Slide copy
 
-**Publish through a controlled path**
+**Controlled delivery**
 
-Read-only investigation → proposed output → detection and validation → permitted writer
+Read-only agent
+Proposed output
+Detection and validation
+Permitted writer
+Issue and PR link
 
-- Limited operations and destinations
-- Verified source and current PR head
-- One linked, reviewable handoff
-- Gate and approvals retain authority
+Trusted automation verifies the source and current PR head.
+CI Investigation success confirms report delivery.
 
 ### Say
 
@@ -322,19 +345,25 @@ Read-only investigation → proposed output → detection and validation → per
 
 Agent read permissions, writer permissions and actual credential scopes must agree. Safe-output title/label filtering controls destinations; it is not atomic event idempotency. Read-only access still has confidentiality implications. The delivery check is an operational report signal and is distinct from required enforcement checks.
 
-## Slide 12 — Demo 2: the root is green
+## Slide 12 — A shared default change
 
 **Time:** 19:00–21:00
 
 ### Slide copy
 
-**Demo 2: the root is green**
+**A shared default change**
 
-Shared hosting module: `zoneRedundant` default `true → false`
+Local verified scenario
 
-Root deployment explicitly passes `true`.
+Shared module default
+param zoneRedundant bool = true
+Candidate default: false
 
-Ordinary CI passes. Which registered callers inherit the new default?
+Root caller supplies zoneRedundant explicitly.
+Active value stays true.
+
+Root compilation and policy checks pass.
+Which registered callers inherit the new default?
 
 ### Say
 
@@ -350,22 +379,22 @@ Ordinary CI passes. Which registered callers inherit the new default?
 
 Do not deliberately throw an exception to simulate impact. The `Registered Consumer Assessment` job compiles baseline and candidate consumer wrappers and resolves their effective values. A script exit `1` records a confirmed requirement finding and is normalized to a successful CI job; an assessment error `2` is not. This preserves the meaning of the original three required checks while adding informational review evidence. Healthy baseline CI is a required fact in this scenario; the review's report must not reuse wording that says baseline CI failed. Only the explicitly allowed assessment mode may accept that successful baseline.
 
-## Slide 13 — Two callers; different effective values
+## Slide 13 — Registered consumers
 
 **Time:** 21:00–24:00
 
 ### Slide copy
 
-**Two callers; different effective values**
+**Registered consumers**
 
-| Registered sample | Input | Before | After |
+| Registered sample | Input | Baseline | Candidate |
 | --- | --- | --- | --- |
-| Consumer A | Explicit `true` | `true` | `true` |
-| Consumer B | Omitted | `true` | `false` |
+| Consumer A | Explicit true | true | true |
+| Consumer B | Omitted | true | false |
 
-Sample requirement `SAMPLE-ZONE-001`: zone redundancy remains enabled.
-
-Two compiled consumers evaluated. No live deployment claim.
+SAMPLE-ZONE-001 requires zone redundancy.
+One of two registered samples violates the requirement.
+Compiled configuration only. No live deployment claim.
 
 ### Say
 
@@ -381,20 +410,24 @@ Two compiled consumers evaluated. No live deployment claim.
 
 For each consumer, evidence retains its declared reference, baseline/candidate module digests, explicit inputs, effective values and scope. The supported module change is only the literal `zoneRedundant` default edit; other module bytes must match. Unsupported expressions or changes are unknown/error rather than invented effective values. `SAMPLE-ZONE-001` belongs to the sample registry, not the policy MCP catalog. In a real multi-repository case, distinguish a declared module version from the version actually resolved by a build and the one deployed. A consumer pinned to an older release differs from one adopting a candidate; neither is automatically affected merely because it appears in an inventory.
 
-## Slide 14 — Select the question before inference
+## Slide 14 — Selection before inference
 
 **Time:** 24:00–26:00
 
 ### Slide copy
 
-**Select the question before inference**
+**Selection before inference**
 
-Sensitive path changed → deterministic consumer assessment → selected review
+Sensitive module change
+Trusted evidence check
+Verified consumer finding
+Selected investigation
 
-- Normal CI remains green
-- Findings cite evaluated consumers and requirement
-- Unknown consumers remain unknown
-- Review output uses the same governed handoff pattern
+No finding: no model
+Exact replay: recover the existing report without AI
+Invalid selected evidence: visible manual review
+
+Shared Module Review is informational. Success means delivery.
 
 ### Say
 
@@ -408,29 +441,31 @@ Sensitive path changed → deterministic consumer assessment → selected review
 
 ### Technical backup
 
-The selected assessment is a new explicit activation path, not a weakening of the failed-CI guard. `.github/workflows/shared-module-investigator.md` runs after successful source CI. Its trusted `select_review` job calls `scripts/select-shared-module-review.cjs`, validates the source, registered evidence and supported finding, and gates model execution. It skips no-change, no-finding, stale and replay cases before the agent. Source binding and current-head checks apply in both modes. The boundary between informational review and a required gate is a repository policy choice; this release does not add the shared review to branch protection.
+The selected assessment is a new explicit activation path, not a weakening of the failed-CI guard. `.github/workflows/shared-module-investigator.md` runs after successful source CI. Its trusted `select_review` job calls `scripts/select-shared-module-review.cjs`, validates the source, registered evidence and supported finding, and gates model execution. It skips no-change, no-finding, stale and replay cases before the agent. Exact replay uses `recover_delivery` to restore the managed PR feedback from the existing verified issue without model inference. Selected evidence rejection invokes `review_status`, publishing **Consumer evidence requires manual review** without starting AI or inventing a violation. Source binding and current-head checks apply in both modes. The boundary between informational review and a required gate is a repository policy choice; this release does not add the shared review to branch protection.
 
-## Slide 15 — Spend inference where it helps
+## Slide 15 — Investigation cost
 
 **Time:** 26:00–28:00
 
 ### Slide copy
 
-**Spend inference where it helps**
+**Investigation cost**
 
-- Route selected questions deterministically
-- Produce known facts without a model
-- Bound evidence, context and output
-- Avoid replay without new evidence
-- Measure accepted handoff time and total cost
+Shared review routes before inference
+Known facts without a model
+Bounded evidence and relevant context
+Shared review recovers replays without AI
 
-Agent and detection budgets are separate.
+Failure investigations still start on eligible failures.
+Measure accepted handoff time and total cost.
+Agent budget: 120 AIC
+Detection has a separate budget.
 
 ### Say
 
 “The cheapest useful investigation may be a deterministic explanation. A known rule with a known remedy often does not need a model. Here, deterministic code performs the checks and consumer comparison; the model's proposed value is the contextual handoff.
 
-“Choose selected questions before inference. Keep the input bounded, request relevant context and avoid rerunning the same question without new evidence.
+“The shared-module path selects its question before inference. It skips no-change, passed, stale and already-recorded cases, and it can recover an existing delivery without AI. The failed-CI workflow still starts the agent for eligible failures; its prompt can avoid duplicate output but cannot guarantee no inference cost. Keep the input bounded and request relevant context.
 
 “Measure the result from source completion to a useful accepted handoff, including queueing, model work, detection and delivery. Record agent and detection credits separately. The agent's 120-credit setting is not a total-workflow budget. I am not claiming a cost saving or percentage improvement without a measured comparison.”
 
@@ -438,20 +473,22 @@ Agent and detection budgets are separate.
 
 Do not confuse MCP gateway call counts with all GitHub CLI/API requests. Cache-read tokens, fresh-runner startup, workflow compute and model credits are different quantities. A ten-minute timeout limits execution duration; it does not guarantee the end-to-end delivery SLA. A kill switch prevents new activation; running work needs separate cancellation.
 
-## Slide 16 — Start small; state the limits
+## Slide 16 — Adoption scope
 
 **Time:** 28:00–30:00
 
 ### Slide copy
 
-**Start small; state the limits**
+**Adoption scope**
 
-1. Pick one unresolved engineering question
-2. Identify authorized evidence and a useful handoff
-3. Keep checks and permissions explicit
-4. Evaluate correctness, effort, latency and cost
+| Demonstrated | Broader adoption needs |
+| --- | --- |
+| One repository | Authorized consumer inventory |
+| Local sample policy | Approved policy ownership and distribution |
+| Two consumers | Resolved versions and effective inputs |
+| No deployment | Relevant deployment or state evidence |
 
-This demo: one repository, local sample policy, two registered consumers, no deployment.
+Supported assessment: literal zoneRedundant default change.
 
 ### Say
 
@@ -465,19 +502,19 @@ This demo: one repository, local sample policy, two registered consumers, no dep
 
 No Azure Container Apps sandbox, Python subsystem, Terraform deployment or new fleet platform is part of this session. A later Terraform adapter could expose scoped plan/state evidence with appropriate secret handling; Bicep needs its own compiled/deployment evidence. Do not present a state file as a universal solution for infrastructure dependencies.
 
-## Slide 17 — From a check to a supported next step
+## Slide 17 — Questions
 
 **Time:** 30:00–31:00; Q&A 31:00–35:00
 
 ### Slide copy
 
-**From a check to a supported next step**
+**Questions**
 
-Keep the gate deterministic.  
-Select evidence worth investigating.  
-Deliver a governed, reviewable handoff.
+CI keeps deterministic checks.
+Selected questions get bounded evidence.
+Engineers receive a reviewable handoff.
 
-Questions
+Nikila Fernando
 
 ### Say
 

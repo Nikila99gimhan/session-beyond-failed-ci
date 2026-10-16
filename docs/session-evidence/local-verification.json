@@ -1,0 +1,70 @@
+{
+  "scope": "Local real Bicep compilation and policy checks; no Azure deployment or live agent run",
+  "records": [
+    {
+      "label": "baseline-build",
+      "exitCode": 0
+    },
+    {
+      "label": "baseline-policy",
+      "exitCode": 0
+    },
+    {
+      "label": "mixed-build-fails",
+      "exitCode": 1
+    },
+    {
+      "label": "mixed-policy-fails",
+      "exitCode": 1
+    },
+    {
+      "label": "fix-build-only",
+      "exitCode": 0
+    },
+    {
+      "label": "policy-still-fails",
+      "exitCode": 1
+    },
+    {
+      "label": "build-still-fails",
+      "exitCode": 1
+    },
+    {
+      "label": "fix-policy-only",
+      "exitCode": 0
+    },
+    {
+      "label": "shared-root-build",
+      "exitCode": 0
+    },
+    {
+      "label": "shared-root-policy",
+      "exitCode": 0
+    },
+    {
+      "label": "shared-consumers-finding",
+      "exitCode": 1
+    },
+    {
+      "label": "shared-consumers-unchanged",
+      "exitCode": 0
+    }
+  ],
+  "compilerDiagnostic": "BCP053",
+  "testedImplementation": "a66da17",
+  "unitTests": {
+    "passed": 139,
+    "suites": 9,
+    "bothIntentionalFixtureSuites": "pass"
+  },
+  "compiler": "Bicep CLI 0.43.8",
+  "typecheck": "pass",
+  "build": "pass",
+  "workflowCompiler": {
+    "version": "0.89.21",
+    "workflows": 2,
+    "warnings": 0
+  },
+  "checkedOn": "2026-10-16",
+  "liveInvestigation": "Pending installation of clean workflow changes on default branch and verified preparation runs"
+}

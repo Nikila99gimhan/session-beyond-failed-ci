@@ -19,6 +19,8 @@ Both examples use the existing TypeScript/Bicep repository. Neither deploys Azur
 
 **Readiness boundary:** local implementation and QA do not establish a live end-to-end delivery result. The revised workflows must be installed on clean `main`, both demonstrations must have inspected completed runs, and the presenter must rehearse them before calling the live session ready. Current run availability is recorded in the final QA report and the ledger below.
 
+The clean implementation is available in [PR #19](https://github.com/Nikila99gimhan/session-beyond-failed-ci/pull/19), candidate `a66da173340484550104ccc6dc88378aa80eb032`. Its four source CI jobs passed in [run 38909060883](https://github.com/Nikila99gimhan/session-beyond-failed-ci/actions/runs/38909060883). This is installation-PR evidence, not either deliberate-error scenario. The owner will merge this clean PR manually. The two new live scenario investigations remain pending that merge and preparation.
+
 ## 2. Minute-by-minute delivery
 
 | Time | Slides | Screen and action | Point to land |
@@ -63,6 +65,14 @@ Timing is a rehearsal allocation, not a measured runtime benchmark. The delivery
 - Keep the final deck and cue sheet available without network access.
 - Confirm `DISABLE_CI_INVESTIGATOR` is not set to `true` for preparation. That switch skips new agent activations; it does not stop an already running job.
 
+The local verification command is:
+
+```bash
+npm run verify:session-demos
+```
+
+It uses real Bicep compilation and isolates twelve cases, including the compiler defect, policy failure, each repair, shared-root override and registered-consumer comparison. Inspect `docs/session-evidence/local-verification.json` with the final QA report. Release checks passed 139 tests, TypeScript typecheck/build and strict compilation of both workflows using gh-aw v0.89.21 with zero warnings. Bicep 0.43.8 produced the actual BCP053 diagnostic for the output-contract fixture. Both deliberate mutant copies also passed the 139-test suite, establishing the specific application-test versus infrastructure-build distinction. These are local QA results, not proof of live agent interpretation or delivery.
+
 ## 4. Demo 1 — two independent causes
 
 ### Fixture
@@ -71,8 +81,38 @@ Start with compliant parameters and the valid network ranges from clean `main`.
 
 | File | Deliberate change | Expected observation |
 | --- | --- | --- |
-| `infra/modules/network.bicep` | Rename exported `outboundSubnetId` to `functionSubnetId`; leave the caller unchanged. | A real Bicep compiler diagnostic at the caller referring to the removed output. Read the actual diagnostic; do not promise an unverified diagnostic number. |
+| `infra/modules/network.bicep` | Rename exported `outboundSubnetId` to `functionSubnetId`; leave the caller unchanged. | BCP053 from Bicep 0.43.8 at the caller referring to the removed output. |
 | `infra/parameters/active.json` | Set `publicNetworkAccess.value` to `Enabled`; keep the other policy inputs compliant. | `POL-AZ-NET-001` fails for the sample production policy. |
+
+### Exact branch preparation
+
+Run these commands **after the clean implementation PR has been merged into `main`**, in a clean working copy of this repository. Inspect `git status --short` first. If it contains unrelated work, use a separate checkout; do not discard that work. The branch names below are examples intended to be new.
+
+```bash
+git status --short
+git fetch origin
+git switch -c feature/hosting-output-update origin/main
+python3 - <<'PY'
+import json
+from pathlib import Path
+module = Path('infra/modules/network.bicep')
+source = module.read_text()
+before = 'output outboundSubnetId string ='
+assert source.count(before) == 1, 'Expected one original output declaration'
+module.write_text(source.replace(before, 'output functionSubnetId string =', 1))
+parameters = Path('infra/parameters/active.json')
+data = json.loads(parameters.read_text())
+assert data['parameters']['publicNetworkAccess']['value'] == 'Disabled'
+data['parameters']['publicNetworkAccess']['value'] = 'Enabled'
+parameters.write_text(json.dumps(data, indent=2) + '\n')
+PY
+git diff -- infra/modules/network.bicep infra/parameters/active.json
+git add infra/modules/network.bicep infra/parameters/active.json
+git commit -m "Update function network output and access settings"
+git push -u origin feature/hosting-output-update
+```
+
+Then manually open a PR from `feature/hosting-output-update` to `main`. Opening the PR initiates CI. The branch push alone does not. Expect the real compiler and independent sample policy checks to fail; leave this fixture unmerged.
 
 ### Screen sequence — eight minutes
 
@@ -114,6 +154,30 @@ The registered consumers are compiled wrappers in the repository. The `Registere
 
 The supported module edit is deliberately narrow: only the literal `zoneRedundant` default may change; the rest of the module must match. Unsupported module edits are reported as unknown/error. This is not a general Bicep interpreter or a claim to assess every hosting-module modification.
 
+### Exact branch preparation
+
+Create the second branch from the **same installed clean baseline**, not from the Demo 1 fixture. First confirm Demo 1's intended changes are committed and no unrelated edits are present. If `main` has moved since the first preparation, record the new baseline and rerun verification rather than presenting the two branches as an identical release.
+
+```bash
+git status --short
+git fetch origin
+git switch -c feature/hosting-plan-default origin/main
+python3 - <<'PY'
+from pathlib import Path
+module = Path('infra/modules/hostingPlan.bicep')
+source = module.read_text()
+before = 'param zoneRedundant bool = true'
+assert source.count(before) == 1, 'Expected one original literal default'
+module.write_text(source.replace(before, 'param zoneRedundant bool = false', 1))
+PY
+git diff -- infra/modules/hostingPlan.bicep
+git add infra/modules/hostingPlan.bicep
+git commit -m "Adjust hosting plan redundancy default"
+git push -u origin feature/hosting-plan-default
+```
+
+Manually open a PR from `feature/hosting-plan-default` to `main`. Verify all four source CI jobs pass, including `Registered Consumer Assessment`, which records the scoped finding. The trusted follow-up then selects the finding for a separate review. Leave the changed-default fixture unmerged during preparation.
+
 ### Screen sequence — seven minutes
 
 1. **Question and change — one minute.** “The root is green. What about registered callers that use the default?” Show one changed default and the root's explicit override.
@@ -121,6 +185,8 @@ The supported module edit is deliberately narrow: only the literal `zoneRedundan
 3. **Selection — one minute.** Show `.github/workflows/shared-module-investigator.md` and the trusted `scripts/select-shared-module-review.cjs` selector. It validates the source relationship, module/registry/template evidence and finding before model inference; no change, no finding, stale source and exact replay are not new investigation work.
 4. **Consumer evidence — two minutes.** Show the two compiled consumer results and the recorded redundancy requirement. Explain why A and B differ.
 5. **Handoff and limits — two minutes.** Show the `Shared Module Review` check, `[Module Review]` issue and managed PR link. The assessment finding does not rewrite the successful baseline. A successful review check confirms report delivery, not approval. It is currently informational, not an additional required merge gate.
+
+For a replay with an existing verified bot-authored occurrence, `recover_delivery` restores the PR link/check from the existing controlled report without model use. If selected consumer evidence is missing, unsupported or invalid, the trusted `review_status` job publishes a visible **Consumer evidence requires manual review** result without starting the model. Do not describe an evidence rejection as a verified consumer violation.
 
 ### Repair and limitation
 
@@ -138,7 +204,7 @@ npx tsx scripts/assess-shared-module.ts \
 
 A requirement finding exits `1`; a compliant comparison exits `0`; an unsupported/incomplete assessment exits `2`. The PR CI wrapper deliberately records `1` as a review finding while preserving successful baseline CI. Do not apply that exit-code normalization to the existing deployment policy gate.
 
-The shared review reuses `get_investigation_context` only where ownership or catalog context is useful. `SAMPLE-ZONE-001` is the registered consumer requirement; it is not a policy-MCP rule. The compiled consumer evidence establishes this finding, independently of the catalog lookup.
+The compiled consumer evidence establishes this finding. If ownership is useful, the shared review may use the narrow `get_service_ownership` tool for the root service. That fact does not establish sample consumer owners. It does not fetch unrelated policy rules. `SAMPLE-ZONE-001` is the registered consumer requirement; it is not a policy-MCP rule.
 
 These are two registered sample consumers. A future authorized collector could supply other repositories' resolved versions and effective inputs. Actual cloud impact also needs deployment or state evidence; this demo makes no live cloud claim.
 
@@ -148,7 +214,8 @@ Replace `PENDING` only with inspected evidence. An older run may be used as an e
 
 | Item | Demo 1 | Demo 2 |
 | --- | --- | --- |
-| Clean automation revision | PENDING — release QA | PENDING — same release |
+| Clean implementation candidate | `a66da173340484550104ccc6dc88378aa80eb032`, PR #19 | Same candidate; installation pending owner merge |
+| Clean implementation CI | Four jobs passed, run `38909060883` | Installation evidence only, not scenario evidence |
 | Feature branch / PR | PENDING — preparation | PENDING — preparation |
 | Source head SHA | PENDING | PENDING |
 | Tested merge SHA | PENDING | PENDING |
