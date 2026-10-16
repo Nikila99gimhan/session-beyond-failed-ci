@@ -11,6 +11,8 @@ const headSha = "a".repeat(40);
 const testedSha = "b".repeat(40);
 const baselineSha = "c".repeat(40);
 const bot = { login: "github-actions[bot]", type: "Bot" };
+const sanitizedReview = JSON.parse(fs.readFileSync("tests/fixtures/sanitized-report-markers.json", "utf8"))
+  .cases.find((item: any) => item.workflow === "shared-module-investigator").sanitized;
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(directory => fs.rmSync(directory, { recursive: true, force: true })));
 
@@ -161,10 +163,9 @@ describe("trusted shared module selection before model use", () => {
 
   it.each(["body", "comment"])("suppresses a paid replay using a verified bot %s occurrence", async location => {
     const f = fixture();
-    const occurrence = "OCCURRENCE_KEY: demo/repo::100::1";
     f.issues.push({ number: 23, title: "[Module Review] registered consumer", labels: ["shared-module-review"],
-      user: bot, body: location === "body" ? occurrence : "Earlier occurrence" });
-    if (location === "comment") f.comments.push({ user: bot, body: `<!-- ${occurrence} -->` });
+      user: bot, body: location === "body" ? sanitizedReview : "Earlier occurrence" });
+    if (location === "comment") f.comments.push({ user: bot, body: sanitizedReview });
     expect(await select(f)).toEqual({ selected: true, investigate: false, replay: true, reason: "recorded-occurrence" });
   });
 

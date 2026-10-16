@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 const { start, finish, recover, hasOccurrence } = createRequire(import.meta.url)("../scripts/publish-investigation-feedback.cjs");
 
 const sha = "a".repeat(40);
 const bot = { login: "github-actions[bot]", type: "Bot" };
 const repo = { owner: "demo", repo: "repo" };
 const marker = "OCCURRENCE_KEY: demo/repo::100::1";
+// Captured through the pinned runtime's real ingestion/writer sanitizer twice.
+// See the fixture provenance; this is a local compatibility check, not Actions.
+const sanitizedDelivery = JSON.parse(readFileSync("tests/fixtures/sanitized-report-markers.json", "utf8"));
 
 function fixture(mode: "failure" | "shared-module" = "failure") {
   const run: any = {
@@ -56,8 +60,54 @@ function fixture(mode: "failure" | "shared-module" = "failure") {
     issue.title = "[Module Review] hosting plan default affects registered consumer";
     issue.labels = [{ name: "shared-module-review" }];
   }
+  issue.body = sanitizedDelivery.cases.find((item: any) => item.workflow ===
+    (mode === "failure" ? "ci-investigator" : "shared-module-investigator")).sanitized;
   return { github, context, core, delivery, mode, run, pr, check, issue, prComments, issueComments };
 }
+
+describe.each(["failure", "shared-module"] as const)("Sanitized report delivery: %s", mode => {
+  const workflow = mode === "failure" ? "ci-investigator" : "shared-module-investigator";
+  const sample = sanitizedDelivery.cases.find((item: any) => item.workflow === workflow);
+
+  it("keeps the workflow's audit format aligned with the sanitizer compatibility fixture", () => {
+    const source = readFileSync(`.github/workflows/${workflow}.md`, "utf8");
+    const block = source.match(/^ {0,2}```text\n([\s\S]*?)^ {0,2}```/m)?.[1]
+      .replace(/^  /gm, "").trimEnd();
+    expect(block).toBe(sample.template);
+    expect(hasOccurrence(sample.sanitized, marker)).toBe(true);
+    expect(sample.sanitized).toContain("ROOT_CAUSE_FINGERPRINT:");
+  });
+
+  it("links the sanitized issue once and reuses the managed PR comment on replay", async () => {
+    const f = fixture(mode);
+    await finish(f);
+    await finish(f);
+    expect(f.github.rest.issues.createComment).toHaveBeenCalledTimes(1);
+    expect(f.github.rest.issues.updateComment).not.toHaveBeenCalled();
+    expect(f.github.rest.checks.update).toHaveBeenLastCalledWith(expect.objectContaining({
+      conclusion: "success", details_url: "https://github.com/demo/repo/issues/15",
+    }));
+  });
+
+  it("links a distinct occurrence persisted in a sanitized bot issue comment", async () => {
+    const f = fixture(mode);
+    f.delivery.createdIssue = "";
+    f.issue.body = "Earlier occurrence";
+    f.issueComments.push({ body: sample.sanitized, user: bot });
+    await finish(f);
+    expect(f.github.rest.issues.createComment).toHaveBeenCalledWith(expect.objectContaining({ issue_number: 14 }));
+  });
+
+  it("reproduces the legacy marker loss and still refuses to link an unbound report", async () => {
+    const f = fixture(mode);
+    expect(hasOccurrence(sanitizedDelivery.legacy.input, marker)).toBe(true);
+    expect(hasOccurrence(sanitizedDelivery.legacy.sanitized, marker)).toBe(false);
+    f.issue.body = sanitizedDelivery.legacy.sanitized;
+    await expect(finish(f)).rejects.toThrow("Writer issue does not contain this source occurrence");
+    expect(f.github.rest.issues.createComment).not.toHaveBeenCalled();
+    expect(f.github.rest.checks.update).toHaveBeenCalledWith(expect.objectContaining({ conclusion: "failure" }));
+  });
+});
 
 describe("Deterministic PR investigation feedback", () => {
   it("attaches the running check to the PR source commit, not the automation commit", async () => {
