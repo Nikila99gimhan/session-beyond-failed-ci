@@ -50,7 +50,8 @@ jobs:
 
       - name: Validate Bicep Template
         run: |
-          az bicep build --file infra/main.bicep --outfile compiled-template.json
+          set -o pipefail
+          az bicep build --file infra/main.bicep --outfile compiled-template.json 2>&1 | tee bicep-build.log
           echo "Bicep template compiled successfully without errors."
 
       - name: Offline Network Provisioning Preflight
@@ -64,6 +65,7 @@ jobs:
         with:
           name: provisioning-evidence
           path: |
+            bicep-build.log
             provisioning-result.json
             compiled-template.json
             infra/parameters/active.json
@@ -106,4 +108,56 @@ jobs:
             policy-result.json
             investigation-context.json
             infra/parameters/active.json
+          retention-days: 7
+
+  shared-module-assessment:
+    name: Registered Consumer Assessment
+    runs-on: ubuntu-latest
+    # This job has no secrets or write token. Findings are review evidence;
+    # the existing three deterministic required checks retain their meaning.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Select the registered shared module
+        id: scope
+        env:
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha }}
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --name-only "$BASELINE_SHA" "$SOURCE_HEAD_SHA" -- infra/modules/hostingPlan.bicep | grep -q .; then
+            echo "selected=true" >> "$GITHUB_OUTPUT"
+            git show "$BASELINE_SHA:infra/modules/hostingPlan.bicep" > "$RUNNER_TEMP/baseline-hostingPlan.bicep"
+            git show "$SOURCE_HEAD_SHA:infra/modules/hostingPlan.bicep" > "$RUNNER_TEMP/candidate-hostingPlan.bicep"
+          else
+            echo "selected=false" >> "$GITHUB_OUTPUT"
+            echo "No registered shared module changed. No consumer compilation or model call needed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Compile registered consumers and record effective configuration
+        if: steps.scope.outputs.selected == 'true'
+        env:
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha }}
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set +e
+          npx tsx scripts/assess-shared-module.ts --baseline-module "$RUNNER_TEMP/baseline-hostingPlan.bicep" --candidate-module "$RUNNER_TEMP/candidate-hostingPlan.bicep" --output shared-module-assessment.json --templates-dir consumer-templates
+          result=$?
+          set -e
+          if [ "$result" -gt 1 ]; then exit "$result"; fi
+          echo "Consumer assessment exit $result. A verified requirement finding is recorded for the separate review; it does not change the three baseline gates." >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload registered sample consumer evidence
+        if: always() && steps.scope.outputs.selected == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-module-evidence
+          path: |
+            shared-module-assessment.json
+            consumer-templates/
+          if-no-files-found: error
           retention-days: 7

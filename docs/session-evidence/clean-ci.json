@@ -1,0 +1,27 @@
+{
+  "scope": "Clean implementation PR CI, not either revised live investigation",
+  "pr": 19,
+  "runId": 38909060883,
+  "runAttempt": 1,
+  "sourceHeadSha": "a66da173340484550104ccc6dc88378aa80eb032",
+  "testedMergeSha": "cb9c526434f070f16944df19e77fb5e8fff77dc7",
+  "event": "pull_request",
+  "jobs": {
+    "Application Tests": "success",
+    "Bicep Syntax & Template Validation": "success",
+    "Deployment Policy Check": "success",
+    "Registered Consumer Assessment": "success (module unchanged, compile/upload skipped)"
+  },
+  "artifactChecks": {
+    "policyBundleDigest": "verified",
+    "compiledTemplateDigest": "verified",
+    "preflightParametersDigest": "verified",
+    "compilerLogPresent": true
+  },
+  "newLiveInvestigation": "Pending owner merge of PR19",
+  "testedMergeParents": [
+    "6687060b25e26bcef1ddd505a8d35490585d33fd",
+    "a66da173340484550104ccc6dc88378aa80eb032"
+  ],
+  "mergeParentsVerified": true
+}
