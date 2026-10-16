@@ -8,7 +8,7 @@ on:
     workflows: ["CI"]
     types: [completed]
     # PR source branches may have any name; eligibility below additionally
-    # requires a failed PR run with its head in this same repository.
+    # requires a successful PR run with its head in this same repository.
     branches: ['**', '!main']
 
 if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && contains(github.event.workflow_run.pull_requests.*.base.ref, 'main') && github.event.workflow_run.head_repository.id == github.repository_id && vars.DISABLE_CI_INVESTIGATOR != 'true' }}
@@ -167,7 +167,10 @@ jobs:
             await recover({ github, context, core, mode: 'shared-module' });
   agent:
     needs: [select_review]
-    if: needs.select_review.outputs.investigate == 'true'
+    # The compiler also adds the optional recovery/status jobs to agent.needs.
+    # Their intentional skips must not suppress a verified finding. Require
+    # successful activation/selection explicitly while respecting cancellation.
+    if: always() && !cancelled() && needs.activation.result == 'success' && needs.select_review.result == 'success' && needs.select_review.outputs.investigate == 'true'
   investigation_check:
     name: Start PR investigation check
     needs: [pre_activation, select_review]
