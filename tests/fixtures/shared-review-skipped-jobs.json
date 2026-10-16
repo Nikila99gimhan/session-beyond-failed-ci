@@ -1,0 +1,13 @@
+{
+  "sourceRun": 38952114095,
+  "sourceCiRun": 38952038126,
+  "pullRequest": 22,
+  "observedAgentResult": "skipped",
+  "previousCompiledCondition": "(needs.activation.outputs.daily_ai_credits_exceeded != 'true') && (needs.select_review.outputs.investigate == 'true')",
+  "needs": {
+    "activation": { "result": "success", "outputs": { "daily_ai_credits_exceeded": "false" } },
+    "select_review": { "result": "success", "outputs": { "selected": "true", "investigate": "true", "replay": "false" } },
+    "recover_delivery": { "result": "skipped", "outputs": {} },
+    "review_status": { "result": "skipped", "outputs": {} }
+  }
+}
