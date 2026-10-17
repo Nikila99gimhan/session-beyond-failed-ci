@@ -128,7 +128,7 @@ resource tableDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@202
 }
 
 output vnetId string = vnet.id
-output outboundSubnetId string = '${vnet.id}/subnets/snet-functions-outbound'
+output functionSubnetId string = '${vnet.id}/subnets/snet-functions-outbound'
 output privateEndpointSubnetId string = '${vnet.id}/subnets/snet-private-endpoints'
 output sitesDnsZoneId string = sitesDnsZone.id
 output blobDnsZoneId string = blobDnsZone.id
