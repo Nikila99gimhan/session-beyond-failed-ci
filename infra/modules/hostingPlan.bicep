@@ -13,7 +13,7 @@ param hostingPlanName string
 param skuName string = 'EP1'
 
 @description('Enable zone redundancy for high availability')
-param zoneRedundant bool = true
+param zoneRedundant bool = false
 
 resource hostingPlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: hostingPlanName
