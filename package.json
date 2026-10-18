@@ -1,9 +1,12 @@
 {
   "name": "session-beyond-failed-ci",
   "version": "1.0.0",
-  "description": "Beyond Failed CI - Governed Investigation Agents Workshop Demo",
+  "description": "GitHub Dev Days session demo: governed CI investigation and shared-module consumer safety with GitHub Agentic Workflows and MCP",
   "main": "dist/src/functions/hello.js",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0"
+  },
   "scripts": {
     "verify:session-demos": "npm run build && node scripts/verify-session-demos.mjs",
     "build": "tsc",
@@ -12,10 +15,6 @@
     "validate:policy": "tsx scripts/validate-deployment-policy.ts infra/parameters/active.json policy-result.json",
     "scenario:compliant": "cp infra/parameters/compliant.json infra/parameters/active.json && echo 'Active parameter set to COMPLIANT (EP1, Disabled)'",
     "scenario:regression": "cp infra/parameters/noncompliant.json infra/parameters/active.json && echo 'Active parameter set to REGRESSION (EP3, Enabled)'",
-    "play:compliant": "npm run scenario:compliant && tsx scripts/simulate-investigator.ts compliant",
-    "play:regression": "npm run scenario:regression && (tsx scripts/validate-deployment-policy.ts infra/parameters/active.json policy-result.json || true) && tsx scripts/simulate-investigator.ts regression",
-    "play:unrelated": "tsx scripts/simulate-investigator.ts unrelated",
-    "play:missing-mcp": "npm run scenario:regression && (tsx scripts/validate-deployment-policy.ts infra/parameters/active.json policy-result.json || true) && tsx scripts/simulate-investigator.ts regression --missing-mcp",
     "mcp:serve": "node dist/mcp-policy/src/server.js"
   },
   "keywords": [
@@ -30,7 +29,7 @@
   "license": "MIT",
   "dependencies": {
     "@azure/functions": "^4.6.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -38,6 +37,6 @@
     "ajv": "^8.17.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "4.1.11"
   }
 }

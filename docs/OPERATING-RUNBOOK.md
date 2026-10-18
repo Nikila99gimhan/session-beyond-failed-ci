@@ -1,130 +1,132 @@
-# Governed CI Investigation Agent — Operating Runbook & QA Package
+# Operating runbook
 
-## 1. System Overview & Setup Requirements
+This repository is a session reference for governed CI investigation. Deterministic checks decide whether a change satisfies the recorded requirements. The agent reads selected evidence, explains the result and proposes corrections for human review.
 
-The Governed CI Investigation Agent is an analytical workflow triggered on failed PR runs of the `CI` pipeline. CI starts only when a PR targeting `main` is opened, updated with commits, or reopened. Creating a branch or pushing commits without a PR does not run CI. A newer commit cancels an older in-progress CI run for that PR. There is no push or manual CI trigger.
+Start with the [README](../README.md) and [two demo scenarios](demo-scenarios.md). The repository uses a versioned sample policy catalog and two registered local consumers; it does not integrate a live enterprise policy service or deploy Azure resources.
 
-The investigator activates only after failed CI from a same-repository PR, subject to `DISABLE_CI_INVESTIGATOR`. Green, canceled, push, manual, and fork PR runs do not activate the agent. Any internal branch name is eligible; a special demo branch name is unnecessary. GitHub loads `workflow_run` automation from the default branch: these controls become active when the clean workflow change is merged into `main`.
+## Local verification
 
-It correlates code changes against the **sample** versioned policy and ownership fixtures via Model Context Protocol (MCP) and source-run evidence artifacts, then proposes a human handoff issue or occurrence update. Independent infrastructure and policy findings appear in separate rows. CI job summaries show exact ranges or policy values; detailed evidence and audit remain available. The deterministic checks cover selected Bicep parameters and an offline IPv4 subnet containment contract, not full Azure posture or deployment validation. Source PR head and tested merge commit are distinct identities and must both be reported when different.
+Prerequisites: Node.js 20.19+, 22.12+, or 24+, npm and a Bicep compiler. The default compiler path uses Azure CLI's `az bicep build`; a direct executable can be provided through `BICEP_BINARY` for the verifier and consumer assessor.
 
-The asynchronous investigator adds a `CI Investigation` check to the source PR head after CI fails. A separate deterministic publisher links the verified issue in one managed PR comment after detection and controlled delivery succeed. The agent retains read-only permissions; isolated feedback jobs hold check/PR-comment write permissions and execute only the trusted workflow revision. A successful investigation check confirms report delivery and never overrides the required CI gates. See [PR feedback and activation](pr-investigation-flow.md).
-
-### Permissions & Security Boundary
-- **Deterministic CI Gate**: Application tests, Bicep compilation, and `npm run validate:policy` determine CI pass/fail. The policy validator exits `0` or `1` for the selected parameter fixture; the investigator cannot turn a failed gate green.
-- **Evidence Artifact**: The policy job uploads `policy-result.json`, `investigation-context.json`, and the exact `infra/parameters/active.json` it evaluated. The bundle digest is SHA-256 over raw policy-result bytes followed by raw active-parameter bytes. The digest detects a mismatch among these files; it does not authenticate the run or artifact by itself.
-- **Investigator Read Path**: Before agent execution, the runner's artifact action downloads the source run's `policy-result` artifact into `ci-policy-evidence/`. That directory is untrusted evidence; the trusted MCP server is built before the download. If the download fails, the agent reports uncertainty and may use labeled source logs as fallback.
-- **Agent Job Permissions**: The generated job requests `actions: read`, `contents: read`, `issues: read`, and `pull-requests: read`; the GitHub MCP/CLI proxy can instead use `GH_AW_GITHUB_MCP_SERVER_TOKEN` or `GH_AW_GITHUB_TOKEN` if configured. Audit those secrets' actual scopes before claiming the effective agent path is read-only. The agent must use safe outputs for writes.
-- **Safe-Output Job Permissions**: The generated job requests `issues: write` for issue creation/comments. Comments are configured for issues only, with `[CI Failure] ` title prefix and `ci-failure` label required. This is destination filtering, not atomic exact-event deduplication.
-- **Tokens**: `COPILOT_GITHUB_TOKEN` is used for Copilot inference. Job permissions do not narrow the scope of any separate PAT. Never place a broad GitHub write PAT in the agent's GitHub tool token secrets.
-- **Scope**: The MCP server serves local fixture data for this repository's demo. Its `accountScope` allowlist filters request text; it does not authenticate a caller or establish tenant entitlement. Do not deploy it as a shared policy service without caller-bound authorization and server-derived scope.
-
----
-
-## 2. Fixture Commands & Scenario Verification
-
-| Scenario | Local Command | Expected CI Outcome | Investigator Action |
-|---|---|---|---|
-| **Compliant Baseline** | `npm run scenario:compliant` | Green (`0` violations, pass) | Skipped (`conclusion != 'failure'`) |
-| **Policy Regression** | `npm run scenario:regression` | Red (4 violations: `POL-AZ-NET-001`, `POL-AZ-SKU-003`, `POL-AZ-AUTH-004`, `POL-AZ-PRIV-005`) | Creates one issue or updates canonical occurrence |
-| **Unrelated Failure** | `FAIL_APP_TEST=true npm test` | Red (`application-tests` failure) | Classifies as `CODE_OR_TEST_FAILURE` |
-| **MCP Outage** | `npm run play:missing-mcp` | Local simulation after a red policy check | Reports policy context as unverified; no live agent/writer is exercised |
-
----
-
-## 3. Auditing & Inspection Procedures
-
-### Inspecting Workflow Run & Telemetry
-```bash
-# Check status of workflow runs
-gh run list --workflow="Governed CI Investigation Agent" --limit 5
-
-# Download and inspect logs and artifacts
-gh aw logs ci-investigator --last 1 --artifacts all
-
-# Audit a specific run
-gh aw audit <RUN_ID>
+```sh
+npm ci
+npm test
+npm run typecheck
+npm run build
+npm run verify:session-demos
 ```
 
-### Inspecting Safe-Output Delivery
-The safe-output handler outputs a summary in the GitHub Actions Step Summary:
-- If a new root cause is detected: `create_issue` creates `[CI Failure] ...`.
-- If an existing canonical issue exists: `add_comment` appends a table row with `Run ID`, `Run #`, `Head SHA`, and `Run URL` to the canonical issue.
-- A source run attempt is looked up from the source workflow run API. The prompt asks for `noop` on an exact replay, but the built-in writer has no atomic event-key check. Verify the issue and comments before relying on the result.
+The final command uses temporary copies to exercise actual compiler failures, independent policy failures, corrections and registered consumer comparisons. It starts no model and publishes no issues. Tests and the real-compiler verifier cover different concerns; neither proves that GitHub authentication or hosted controlled delivery is configured correctly.
 
-Before a live demo, check that any existing canonical issue has both the `[CI Failure] ` title prefix and `ci-failure` label. An older issue without the label is not an allowed comment destination; update it through normal reviewed repository administration or use a prepared completed run. Do not weaken the writer condition to make a demo pass.
+To inspect the sample policy MCP service locally:
 
-For each run you present, record one audit row with: source repository/run ID/attempt/SHA, evidence artifact read and fallback reason, policy MCP calls and status, GitHub CLI/API reads where observable, agent/detection/stage/wall duration, agent/detection AIC, and issue/comment/noop result. Obtain these from `gh aw audit`, workflow logs, and issue history; do not manufacture missing values.
+```sh
+npm run build
+node dist/mcp-policy/src/server.js --http 8765
+```
 
----
+This starts the demo's HTTP/JSON-RPC endpoint at `/mcp`. Stop it after use. The fixture scope allowlist is a request filter, not authenticated organization authorization; this service is not ready to expose as a shared enterprise endpoint.
 
-## 4. Live Measured Performance & Cost Baseline
+## GitHub configuration
 
-Historical figures copied into the project handoff; this checkout has not authenticated or re-audited those run artifacts. Do not use these as current live QA evidence:
+Install the clean ordinary and compiled agentic workflows on the default branch before opening a demo PR. `workflow_run` uses the default-branch investigator; a PR containing a new investigator does not install it for itself.
 
-The compiled workflow sets 120 AIC for the agent and defaults detection to 400 AIC (`GH_AW_DEFAULT_DETECTION_MAX_AI_CREDITS` may override). The 120 setting is not a total workflow cap.
+Configure an eligible inference credential as the Actions secret `COPILOT_GITHUB_TOKEN`. Keep its value in GitHub's secret store. Optional `GH_AW_GITHUB_MCP_SERVER_TOKEN` and `GH_AW_GITHUB_TOKEN` override GitHub tool authentication in the compiled workflows. Avoid adding broad write credentials to the analytical read path: job permissions do not narrow a separate token's actual scopes. The generated secret manifest also includes optional telemetry settings; they are not required to understand the demo.
 
-| Metric | Run #8 (`36269620350`) | Run #11 (`36270882686`) | Run #13 (`36321908546`) | Run #14 (`36323140408`) | Target / Cap |
-|---|---|---|---|---|---|
-| **Triggering CI Run** | CI #10 (`36269573747`) | CI #13 (`36270836892`) | CI #15 (`36321854790`) | CI #16 (`36323095466`) | N/A |
-| **Total Wall Time** | 302s (~5.0 min) | 355s (~5.9 min) | 377s (~6.2 min) | 363s (~6.0 min) | `< 10 min` |
-| **Agent CLI Loop** | 67s | 138s | 148s | 148s | Bounded |
-| **Threat Detection** | 52s | 45s | 53s | 38s | Bounded |
-| **Agent AIC** | 21.56 AIC | 45.34 AIC | 45.70 AIC | 42.67 AIC | `120 AIC max` |
-| **Threat Detection AIC** | 8.21 AIC | 8.21 AIC | 7.54 AIC | 6.26 AIC | Included |
-| **Total Run AIC** | **29.77 AIC** | **53.55 AIC** | **53.24 AIC** | **48.93 AIC** | Agent and detection budgets are separate |
-| **Reported value ($0.01/AIC)**| **$0.30** | **$0.54** | **$0.53** | **$0.49** | Excludes other costs |
-| **Reported gateway calls** | 7 calls | 21 calls (12 file reads) | 1 (`add_comment`) | 1 (`add_comment`) | Excludes CLI/API reads |
-| **Firewall Requests** | 38 allowed, 0 blocked | 61 allowed, 2 blocked | 70 allowed, 0 blocked | 68 allowed, 0 blocked | `0 blocked` |
-| **Safe Output Status** | Skipped (handler bug) | Reported delivered (#4 comment) | Reported delivered (#4 comment) | Reported delivered (#4 comment) | Re-audit before claiming |
+Require these GitHub Actions check contexts on `main`:
 
----
+| Required check | Purpose |
+| --- | --- |
+| Application Tests | Application unit tests |
+| Bicep Syntax & Template Validation | Real compilation and, if compilation succeeds, offline IPv4 subnet containment preflight |
+| Deployment Policy Check | Selected deployment parameters against the sample policy catalog |
+| Shared Module Safety Gate | Recorded requirements for the scoped registered module change |
 
-## 5. Emergency Break-Glass & Disablement (Kill Switch)
+Preserve strict checks and administrator enforcement when configuring protection. Associate check contexts with the GitHub Actions app where supported. Verify the actual repository rules; checking these workflow files into a new repository does not install branch protection automatically. Required missing, canceled or failed checks are not a pass.
 
-If the investigation agent experiences runaway latency, upstream model outages, or unexpected behavior:
+`CI Investigation` and `Shared Module Review` describe investigation/report delivery. They are not substitutes for the required checks and cannot grant an exception.
 
-### Option A: Repository Variable Kill Switch (Zero Code Changes)
-1. Go to repository **Settings > Secrets and variables > Actions > Variables**.
-2. Add or update variable:
-   - **Name**: `DISABLE_CI_INVESTIGATOR`
-   - **Value**: `true`
-3. Effect: New invocations evaluate the variable in the compiled activation condition and skip investigation. Already-running jobs may continue; cancel them separately in Actions if needed.
-4. **The deterministic CI policy gate remains 100% active and continues enforcing security rules.**
-*(Status: Configured in workflow expressions and compiled into lockfile)*.
+## Event and selection behavior
 
-### Option B: GitHub Actions UI Disable
-1. Navigate to repository **Actions** tab.
-2. Under Workflows, select **Governed CI Investigation Agent**.
-3. Click the `...` menu and select **Disable workflow**.
+`CI` and **Shared Module Safety** start on PRs targeting `main` when opened, updated with commits or reopened. A branch push without a PR does not start them. A newer run cancels the older in-progress run for the same PR within each workflow.
 
----
+After an eligible same-repository PR's `CI` workflow completes:
 
-## 6. Rollback Runbook (Reviewed PR Procedure)
+- Failure enters the failed-CI investigator. Each independent failed job needs its own diagnosis.
+- Success enters shared-module selection. A verified finding for the registered default change starts the shared investigator; unchanged modules and passing consumer requirements skip model use.
+- An exact already-delivered shared occurrence can recover the controlled report without inference. Invalid selected evidence requires manual review and does not start the model.
+- Fork PRs, canceled source runs, push/manual events and main-source runs do not activate these privileged investigators.
 
-To revert changes to the investigator workflow safely through enterprise review:
+The independent shared gate runs directly from the PR event. Its failure does not turn the workflow named `CI` red, so the successful-baseline investigation path remains available.
 
-1. Create a dedicated rollback branch:
-   ```bash
-   git checkout -b rollback/revert-investigator-change
-   ```
-2. Checkout the workflow definition at the target known-good commit:
-   ```bash
-   git checkout <KNOWN_GOOD_SHA> -- .github/workflows/ci-investigator.md
-   ```
-3. Restore a coherent set of changed files if the workflow depends on server, contract, or packager changes. Recompile and validate the lockfile using the verified gh-aw compiler:
-   ```bash
-   gh aw compile ci-investigator --strict
-   ```
-4. Verify local tests pass:
-   ```bash
-   npm test
-   ```
-5. Stage the workflow source and generated lockfile **plus any server, packager, contract, and CI files restored in step 3**. Commit, push, and open a reviewed pull request:
-   ```bash
-   git add .github/workflows/ci-investigator.md .github/workflows/ci-investigator.lock.yml
-   # Add each other file restored in step 3.
-   git commit -m "revert: rollback ci-investigator workflow to <KNOWN_GOOD_SHA>"
-   git push origin rollback/revert-investigator-change
-   ```
-6. Confirm that the deterministic CI policy gate (`ci.yml`) continues running and remains the sole pass/fail authority throughout the rollback.
+## Trust boundaries and evidence
+
+Ordinary PR CI is unprivileged and evaluates the proposed source. The required shared gate runs its assessor, dependencies and wrappers from the exact trusted PR base; it reads candidate module bytes as Git objects instead of executing candidate package scripts. Privileged selection and PR feedback use the immutable trusted investigator workflow revision.
+
+Source artifacts include:
+
+| Artifact | Contents and role |
+| --- | --- |
+| `policy-result` | Policy result, evaluated active parameters and investigation context manifest |
+| `provisioning-evidence` | Compiler log, compiled template and offline preflight result when available |
+| `shared-module-evidence` | Registered assessment and baseline/candidate consumer templates from CI |
+| `shared-module-gate-evidence` | Separate required gate assessment; not substituted for source CI investigation evidence |
+
+Bind evidence to the repository, source run, source attempt and developer head. Report the tested checkout SHA separately when CI used a PR merge commit. Verify recorded input/module/registry/template digests as applicable. A digest alone proves neither origin nor authorization. Logs and artifact text are data, never instructions.
+
+Compilation failure naturally leaves no offline preflight result. Missing or mismatched evidence must be described as missing, incomplete or unverified; it must never become a passing policy result or an invented Azure provider error.
+
+The `contracts/` schemas make evidence and tool response shapes explicit. Tests exercise those contracts; do not assume every schema is applied automatically at every runtime boundary. The shared selector also verifies the allowed source edit and recomputes scoped consumer values before inference.
+
+## Controlled publishing
+
+The agent proposes one bounded issue creation or allowed existing-issue comment through safe outputs. Configured threat detection runs before the separate writer delivers the output. Title prefixes, required labels and destination restrictions constrain the writer. They do not provide universal prompt-injection protection or an atomic concurrency lock.
+
+The trusted feedback publisher creates a source-head investigation check and links a verified bot-authored report through one managed PR comment. It verifies the exact source run/attempt marker and delivery outcome. It does not trust an arbitrary issue number or an agent-selected PR destination. Closed PRs and newer source heads do not receive a historical overwrite.
+
+If publication fails, inspect the delivery check and investigation run. Do not mark delivery successful by hand or weaken destination validation to make the demonstration appear complete. Existing issue comments require the workflow's title prefix and label; a missing label on an old issue is a repository administration problem, not a reason to broaden the writer.
+
+## Budgets and stopping investigations
+
+Both investigator Markdown files set `max-ai-credits: 120` and a ten-minute agent execution timeout. These are not a total workflow budget or end-to-end duration promise. Setup, selection, detection and publishing have separate jobs. The checked-in compiled detection configuration defaults to 400 AIC through `GH_AW_DEFAULT_DETECTION_MAX_AI_CREDITS`, which a repository variable can override. Measure agent and detection usage separately; do not infer a dollar conversion or production ROI from a sample run.
+
+For the shared path, deterministic selection avoids model calls for unchanged modules, passing consumers and exact report recovery. The failed-CI path currently activates for eligible failed `CI` runs rather than applying a general cost-benefit selector to every failure.
+
+To stop new model investigations, set repository Actions variable `DISABLE_CI_INVESTIGATOR` to `true`. Cancel already-running investigator jobs separately if needed. This switch does not disable ordinary CI or the required shared-module gate. Re-enable by removing the variable or changing its value after the underlying issue is understood.
+
+## Diagnose a missing check or report
+
+| Symptom | Check first |
+| --- | --- |
+| No CI after pushing | Is there an open PR targeting `main`? Branch pushes alone are intentionally inactive. |
+| CI failed but no investigator | Did the source conclude `failure`, originate from an eligible same-repository PR and pass the kill-switch condition? Are compiled workflows installed on the default branch? |
+| Successful CI but no shared agent | Did the registered module actually change? Did selection find a complete verified consumer requirement failure? Passing or unchanged scope correctly uses no model. |
+| Source-head investigation check not visible yet | It is asynchronous after CI completion and activation/selection. Inspect the investigator Actions run; required safety enforcement does not wait for this check. |
+| Shared evidence unsupported | Read selector/assessor diagnostics. Only the literal boolean default edit is supported automatically; other edits need manual review. |
+| Model never starts | Inspect activation, credential validation, selection and skipped-job dependencies. Do not remove gates or broaden credential scopes as a shortcut. |
+| Issue exists but PR comment is missing | Inspect detection, safe-output result, exact source marker, bot delivery verification and whether the PR is still open at that head. |
+| PR mergeable despite known consumer finding | Verify required `Shared Module Safety Gate` configuration on the current source commit. Delivery success must not substitute for this required gate. |
+
+Use GitHub Actions run details to inspect the source CI and investigator separately. With authenticated GitHub CLI and the compatible `gh aw` extension, useful read commands are:
+
+```sh
+gh run list --limit 10
+gh run view RUN_ID --log
+gh aw audit RUN_ID
+```
+
+Replace `RUN_ID` with the relevant source or investigator run. Review logs before sharing them publicly; output can include source data and operational context even when secrets are masked.
+
+## Maintaining the workflows
+
+Edit `.github/workflows/ci-investigator.md` or `shared-module-investigator.md`, then regenerate the matching `.lock.yml` files with compatible tooling. The checked-in locks record compiler version `v0.89.21`; changing compiler versions is a separate reviewed dependency update. With that compatible extension installed:
+
+```sh
+gh aw compile
+```
+
+Review generated permissions, event conditions, activation dependencies, safe-output settings and budget changes alongside the Markdown diff. Run the automated tests, typecheck/build and real-compiler verifier before installing the change on `main`. Retest hosted delivery with a new source run; old investigator reruns retain their old workflow revision.
+
+## Enterprise extension points
+
+A real rollout needs authenticated policy services, server-derived authorization, maintained consumer ownership/version/input inventory, auditable exceptions, deployment evidence and a usage budget. This demo's fixture service and two wrappers illustrate the integration boundary. They do not discover an enterprise fleet, inspect remote Terraform state or prove live infrastructure posture.

@@ -1,21 +1,55 @@
-# PR scans and investigation
+# PR checks, investigation and feedback
 
-1. Create a branch from `main` and commit the change. Pushing without a PR does not start CI.
-2. Open a PR to `main` (draft PRs are included). CI runs application tests, Bicep compilation with an offline network preflight, and the independent organization policy check.
-3. A newer commit on that open PR starts CI again and cancels any older CI still running for the same PR. Reopening the PR also runs CI. Changing only the PR description does not.
-4. Failed CI from a same-repository PR activates the investigator. Green or canceled CI does not. The kill switch, trusted default-branch automation, read-only agent permissions, detection, and separate controlled issue writer remain in place. Fork PRs receive CI checks but cannot activate the privileged investigator.
-5. The investigator verifies both evidence sets, examines every failed job, retrieves source diffs through the GitHub API, and reports independent infrastructure and policy causes in a findings table. Missing evidence produces a partial investigation with an explicit unknown.
-6. After failed CI, a separate trusted job creates a `CI Investigation` check on the source PR head commit. It starts after CI finishes, so it is not a fourth scanner or a job that blocks CI from completing. The investigator's own Actions jobs still belong to the default-branch workflow revision.
-7. After detection and controlled issue delivery succeed, a deterministic publisher verifies the issue's exact source-run/attempt marker and bot-authored delivery. It posts one managed PR comment linking that issue and completes the source-commit check. Existing-issue updates and exact replays also resolve the verified issue; they do not need another issue. Reruns update the managed comment rather than adding duplicates. The successful investigation check means a report was delivered; the original failing required CI checks still block merging.
+## What starts each workflow
 
-The agent remains read-only. Only the two isolated feedback jobs receive `checks: write`; the final publisher additionally gets `pull-requests: write` for the source PR comment and `issues: read` to verify the controlled report. Both jobs check out the immutable trusted workflow SHA with persisted credentials disabled. They never execute PR code or accept an agent-selected PR destination. Missing, ambiguous, cross-repository, rejected, or unbound reports cannot produce a success comment. A closed PR or newer PR head receives no historical comment overwrite. Publishing failure marks the investigation check failed and points to the investigation run.
+Creating or pushing a branch alone does not start these scans. `CI` and **Shared Module Safety** respond to PRs targeting `main` when they are opened, updated with commits, or reopened. Draft PRs are included. Editing only the PR description does not start CI. Each workflow cancels its older in-progress run for the same PR when a newer run starts.
 
-These jobs are part of the default-branch investigator and become active only after that workflow change reaches `main`. To test them against an existing failure, rerun its source CI after installation; rerunning an old investigator uses its old workflow revision and will not install new feedback behavior.
+The agentic workflows run after a completed workflow named `CI`, using `workflow_run` automation installed on the repository's default branch:
 
-The infrastructure artifact records resolved subnet operations, input digests, source PR head and tested merge SHA. The policy bundle separately records source PR head and tested checkout SHA. A digest alone does not authenticate the source; the investigator must also verify run/repository/attempt and checkout identity. The offline preflight performs no Azure provisioning.
+| Completed source CI | Additional selection | Result |
+| --- | --- | --- |
+| Failure | Same-repository PR to `main`, non-main source branch, kill switch off | Failed-CI investigation |
+| Success | Same eligibility, changed registered module, complete verified consumer finding | Shared-module investigation |
+| Success with unchanged module or no consumer finding | Deterministic selector only | No model investigation |
+| Canceled, fork PR, push/manual event, or kill switch on | Ineligible | No privileged investigation |
 
-## Activation and demo
+A successful ordinary CI workflow is not proof that every required PR check passed: the separate required **Shared Module Safety Gate** can fail while baseline `CI` is green. See the [merge gate](shared-module-merge-gate.md).
 
-The `workflow_run` investigator must be installed on `main` to take effect. Merge only the clean workflow PR after its checks pass. PR #10 contains intentional Bicep and EP3 defects and must remain unmerged. After installing the workflow, update that test branch with the approved automation and push one new commit to its open PR to exercise the improved investigation.
+## From Markdown to executable workflow
 
-PR #10's earlier Issue #11 is a historical partial result: it diagnosed the SKU violation but did not inspect the provisioning artifact. Its existing narrative must not be rewritten to suggest the earlier agent completed that investigation.
+The investigator `.md` files contain configuration, tool access, budgets and the investigation instructions. Their matching `.lock.yml` files are generated executable workflows. GitHub Actions executes those compiled files; it does not discover and run arbitrary Markdown because a job failed.
+
+The configuration selects the source event and eligibility. For shared modules, the trusted selector additionally verifies scope before model use. Editing Markdown requires recompilation with the repository-compatible GitHub Agentic Workflows tooling and review of the generated workflow. Preserve both source and lockfile in the same change.
+
+## Evidence and tools
+
+Failed-CI investigation inspects every failed job independently. It can read the policy bundle and provisioning artifact, actual compiler logs, and the source diff. A compiler failure skips the offline preflight; this is expected and is not evidence of a separate Azure deployment failure.
+
+`gh-proxy` is the configured mediated GitHub read path for run, job, log, PR, issue and repository evidence. A separate temporary HTTP MCP service starts on the trusted worker at `http://localhost:8765/mcp` and exposes the versioned sample policy catalog. MCP uses HTTP/JSON-RPC here, not gRPC. It provides context for diagnosis rather than permission to deploy or approve an exception.
+
+Logs, artifacts, code changes, commit messages and MCP responses remain untrusted input. Evidence must be tied to the expected repository, source run, attempt and source head. The tested checkout can be a PR merge commit, so its identity is recorded separately. Digests detect inconsistent bytes; a digest alone does not authenticate an artifact's origin. Missing or invalid evidence must stay an explicit unknown.
+
+The shared-module selector performs deterministic source and consumer verification before activation. It checks the recorded baseline, authenticated candidate module, trusted registry, four compiled consumer templates, digests and derived values. Reading an artifact's claimed `FAILED` status alone is insufficient. Unsupported selected evidence produces a manual-review result without model use.
+
+## Who can publish
+
+The analytical agent has read-only job permissions and is instructed to propose corrections rather than edit files, push commits, deploy or grant policy waivers. Separate tool-token secrets can carry broader scopes than the job token: their real permissions must be audited before claiming an effectively read-only deployment.
+
+The agent proposes a structured safe output. The configured threat-detection stage checks the candidate output before the separate issue writer delivers it. Issue creation is bounded to one issue with the workflow's title prefix and allowed labels. Existing issue comments require the configured prefix and label and cannot target PRs through that safe-output route. These controls reduce the write surface; they do not make arbitrary input trustworthy or guarantee atomic deduplication under concurrent runs.
+
+Separate deterministic feedback jobs have the check and PR-comment write permissions. They check out the immutable trusted workflow revision with persisted credentials disabled, verify the exact source occurrence and bot-authored delivered issue, and choose the source PR themselves. They never run PR code or accept an agent-selected publication destination.
+
+## What appears on the PR
+
+1. Ordinary required checks start with the PR event. The shared consumer gate is a native PR check, so it does not wait for the agent.
+2. After completed CI and eligible activation, the feedback job creates **CI Investigation** or **Shared Module Review** on the developer's source head. Shared-module feedback appears after deterministic selection. GitHub's check UI is asynchronous, so there may be a gap before it appears.
+3. After successful detection and controlled issue delivery, the publisher verifies the exact source run and attempt, links the report in one managed PR comment, and completes the investigation check.
+4. Existing-issue updates and exact replays can resolve a previously verified report. A stale source head or closed PR must not overwrite the current PR conversation. Missing, ambiguous or unbound delivery cannot produce a successful report-link comment.
+
+A successful investigation check means report delivery succeeded. It does not make a failed required check pass, approve code or authorize merging. The required deterministic checks remain in control.
+
+## Retesting changes
+
+Workflow-run automation must be present on the default branch before it can handle new source runs. After installing a clean workflow update, start fresh source CI with a new commit or a source CI rerun. Rerunning an old investigator uses that investigator's old workflow revision. The separate shared-module gate needs a PR open, update or reopen event; rerunning only an old CI workflow does not start that gate.
+
+For preparation commands and expected results, use the [two demo scenarios](demo-scenarios.md). For configuration and delivery troubleshooting, use the [operating runbook](OPERATING-RUNBOOK.md).

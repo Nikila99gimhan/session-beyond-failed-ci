@@ -1,54 +1,65 @@
 # Shared module merge gate
 
-## Why this gate exists
+A root application's green CI result covers the inputs that application evaluated. Another caller can inherit a shared module default that the root overrides. This repository separates enforcement of that caller's recorded requirement from the agent's explanation of the finding.
 
-PR #30 showed a valid gap in the original informational design. Its source CI finished at 20:45:12 UTC; the asynchronous shared review attached its check at 20:46:07 UTC, after source/evidence selection. The original three required checks were green and `Shared Module Review` was optional, so GitHub still considered the PR mergeable while the agent ran.
+## Required check and asynchronous explanation
 
-The owner selected this requirement: **merging is possible only after the consumer requirement finding is fixed**. Successful AI report delivery must not approve a known consumer violation.
+`.github/workflows/shared-module-gate.yml` defines **Shared Module Safety Gate** in the separate **Shared Module Safety** workflow. It starts directly on PR open, update and reopen events targeting `main`, alongside ordinary CI. Configure it as a required check in addition to the three baseline checks; a workflow file alone does not install branch protection.
 
-## Implementation
+The check uses no model or inference credentials. Its token has only `contents: read`. An unchanged registered hosting module passes without dependency installation or consumer compilation.
 
-`.github/workflows/shared-module-gate.yml` provides the native PR check **Shared Module Safety Gate**. It starts on PR open, update and reopen, alongside ordinary CI, rather than waiting for `workflow_run`. Branch protection requires this check in addition to the original three checks.
+For a changed module:
 
-- The check uses no model or inference credentials. Its token has only `contents: read`.
-- The assessor, dependency lockfile and registered wrappers come from the exact PR base revision in `automation/`.
-- The candidate checkout supplies only module bytes, read with `git show`. Candidate package scripts and assessment code are never executed by this gate. A candidate symlink is read as its Git blob, not followed as a filesystem path.
-- An unchanged registered module passes without installing dependencies or compiling consumers.
-- A changed module uses the existing narrow assessor. Exit `0` passes; exit `1` blocks a requirement finding; exit `2` blocks unsupported or incomplete evidence. No finding exit is normalized to success here.
-- Gate evidence has its own artifact name and is not substituted for the original source CI investigation artifacts.
+- The assessor, dependency lockfile, registry and wrappers come from the exact trusted PR base revision.
+- Candidate module bytes are read with `git show`. Candidate assessment code and package scripts are never executed by this gate. A candidate symlink is read as its Git blob rather than followed.
+- The real Bicep compiler evaluates the two registered wrappers against baseline and candidate modules. The narrowly scoped assessor derives effective `zoneRedundant` values and compares them with the recorded requirement.
+- Exit `0` passes. Exit `1` blocks a verified requirement finding. Exit `2` blocks unsupported, incomplete or invalid evidence. The required gate never normalizes a finding to success.
+- Its `shared-module-gate-evidence` artifact remains separate from the original CI investigation artifacts.
 
-## Relationship to the investigation
+Missing, canceled, timed-out or failed required results do not authorize merging. Preserve strict checks and administrator enforcement when configuring repository protection.
 
-The existing workflow named **CI** still owns its original baseline checks and the review evidence artifact. Its successful conclusion can continue to trigger the shared-module investigator. The new workflow has a different name, so its failing deterministic gate does not suppress the successful-CI investigation path.
+## Why the workflow named CI can stay green
 
-Expected unsafe-default result:
+Ordinary `CI` has a **Registered Consumer Assessment** job that records source evidence for review. That job allows a complete requirement finding to remain an informational artifact; unsupported assessment still fails the job. The separate required safety gate preserves the finding's failure exit status.
 
-| Signal | Result |
+A successful workflow named `CI` can therefore trigger the shared investigator while **Shared Module Safety Gate** is red. Requiring only an asynchronous report-delivery check would leave a gap before the check is attached and would confuse successful explanation with requirement satisfaction.
+
+For the session's unsafe-default example:
+
+| Signal | Expected result |
 | --- | --- |
-| Application, root Bicep and deployment policy checks | Pass |
-| CI Registered Consumer Assessment | Complete finding recorded for review |
-| Shared Module Safety Gate | Fail because the inherited consumer becomes false |
-| Shared Module Review | Pending while investigating; success after report delivery |
-| Merge | Blocked by the required safety gate even after the report is delivered |
+| Application Tests | Pass |
+| Root Bicep validation and deployment policy | Pass; root explicitly supplies `zoneRedundant: true` |
+| CI Registered Consumer Assessment | Complete finding recorded; baseline CI remains green |
+| Shared Module Safety Gate | Fail; inherited sample consumer becomes `false` |
+| Shared Module Review | Starts after selection; success means the verified report was delivered |
+| Merge | Blocked by the required gate until the recorded requirement passes |
 
-Restoring `zoneRedundant` default to `true` makes the scoped consumer comparison pass. The model cannot change this result or grant an exception. The comparison covers two registered sample consumers and a literal default edit, not arbitrary Bicep edits or live Azure state.
+Restoring the shared default to `true` makes the scoped comparison pass. The agent cannot change the check's result, edit the source or grant a waiver.
 
-## Installation and retest
+## Selection before model use
 
-1. The owner merges the clean gate implementation PR after all its checks pass.
-2. The required-check configuration must contain the original three contexts plus `Shared Module Safety Gate`, associated with the GitHub Actions app. Preserve strict checks and admin enforcement. Do not require the informational `Shared Module Review` delivery check as a substitute for this safety gate.
-3. Update the demo feature branch with the installed main revision and push it, generating a fresh PR `synchronize` event. Re-running only an old CI run does not start this separate PR-event workflow.
-4. Confirm the safety gate is queued/running alongside CI, then fails the intentional default change. Confirm the PR remains blocked while the investigation runs and after its report is delivered.
-5. Restore the default on the demo branch and push. Confirm the safety gate passes before merging. Missing, cancelled, timed-out or failed required gate results do not authorize a merge.
+After successful eligible baseline CI, trusted selection verifies the exact source run, attempt, PR head and baseline. It retrieves authenticated module bytes, validates the registered wrappers and artifact digests, and recomputes the supported effective values.
 
-GitHub check registration and the UI are asynchronous. A required check that has not reported is expected/waiting, not a successful consumer evaluation. Required statuses apply to GitHub's commit/check model; reusing a SHA across PRs can display historical checks, so inspect the current run and source identity during rehearsals.
+An unchanged module or complete passing consumer assessment does not start the model. A complete verified finding can activate the investigator. A previously delivered exact occurrence can recover its report link without another inference run. Unsupported or invalid selected evidence produces a manual-review result without model use.
 
-## Session wording
+Both the source developer SHA and the tested PR merge SHA matter. GitHub check registration is asynchronous, and reusing a commit across PRs can display historical checks. Inspect the current source run and check identity before interpreting the UI.
 
-The root baseline CI is green, but a separate deterministic consumer safety gate is red. The investigation explains the finding and proposes the correction. It does not decide whether the requirement can be waived, and a green investigation-delivery check does not make the unsafe change mergeable.
+## Supported scope
 
-## Local verification
+The automated assessment allows only the literal `param zoneRedundant bool = true` to `false` default change, with the rest of the module unchanged. Two registered sample wrappers are compiled: one explicitly supplies `true`; the other inherits the default. Their requirement is a sample consumer contract, not a universal Azure policy.
 
-- Executed the exact workflow scope and enforcement commands with real Bicep: unchanged module skips compilation; unsafe default exits `1`; unsupported edit and symlink Git blob exit `2`; restored default exits `0` with no findings.
-- All 159 existing tests passed, along with TypeScript typecheck/build. Both existing agentic workflows remain compiled and unchanged.
-- Live gate execution and required-check configuration are separate release evidence. Confirm their actual results before claiming the gate is installed on main or that the current demo PR has exercised it.
+Other module edits, unsupported expressions, missing consumers, incorrect wrappers or inconsistent source/template bindings require manual review. The demo does not discover other repositories, read Terraform state or prove deployed Azure values. See the [consumer fixture documentation](../fixtures/shared-module-consumers/README.md) for the exact verifier contract.
+
+## Verify and demonstrate
+
+Use `npm run verify:session-demos` for the real-compiler local example without model calls. Use the [scenario preparation guide](demo-scenarios.md) for a fresh developer branch and manual PR creation.
+
+For a hosted retest:
+
+1. Install the clean gate and compiled investigator on `main`; confirm the four required check contexts in the [runbook](OPERATING-RUNBOOK.md).
+2. Create or update a feature branch from that baseline and open its PR. Rerunning only an old CI workflow does not start this separate PR-event gate.
+3. Confirm the gate queues alongside CI and fails the intentional default change. Confirm the PR remains blocked during investigation and after report delivery.
+4. Restore the safe default on the same branch and push. Confirm a fresh required gate succeeds before considering a human-reviewed merge.
+
+Keep intentional unsafe examples out of `main`. The gate enforces the recorded consumer requirement; the investigation provides the explanation and proposed correction.
